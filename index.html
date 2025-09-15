@@ -472,6 +472,25 @@
                         </div>
                     </div>
                     
+                    <!-- User Management -->
+                    <div class="bg-green-50 rounded-lg p-4 mb-6">
+                        <h4 class="text-lg font-bold text-gray-800 mb-4">👥 အကောင့်များ စီမံခန့်ခွဲမှု</h4>
+                        <div id="userManagementContent" class="space-y-3">
+                            <!-- User management items will be added here -->
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-green-200">
+                            <div class="flex gap-2">
+                                <button onclick="makeAllUsersWin()" class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded transition-colors">
+                                    🏆 အားလုံး အနိုင်ရစေမည်
+                                </button>
+                                <button onclick="resetAllUserBalances()" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-colors">
+                                    💰 လက်ကျန်ငွေ Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Pending Approvals -->
                     <div class="bg-blue-50 rounded-lg p-4">
                         <h4 class="text-lg font-bold text-gray-800 mb-4">📋 Pending Approvals</h4>
@@ -1044,6 +1063,216 @@
             `).join('');
         }
 
+        // Update user management display
+        function updateUserManagementDisplay() {
+            const container = document.getElementById('userManagementContent');
+            const regularUsers = users.filter(user => user.type !== 'admin');
+            
+            if (regularUsers.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">အကောင့်များ မရှိပါ</p>';
+                return;
+            }
+            
+            container.innerHTML = regularUsers.map(user => `
+                <div class="border rounded-lg p-3 bg-white">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-800">${user.name}</div>
+                            <div class="text-sm text-gray-600">${user.phone}</div>
+                            <div class="text-xs ${user.type === 'vip' ? 'text-purple-600' : 'text-blue-600'}">${user.type === 'vip' ? 'VIP User' : 'Regular User'}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm text-gray-600">လက်ကျန်ငွေ</div>
+                            <div class="font-bold text-green-600">${user.balance.toLocaleString()} ကျပ်</div>
+                        </div>
+                        <div class="ml-3 flex flex-col gap-1">
+                            <button onclick="addUserBalance('${user.phone}', 10000)" class="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded">
+                                +10K
+                            </button>
+                            <button onclick="makeUserWin('${user.phone}')" class="bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-2 py-1 rounded">
+                                🏆 Win
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Admin user management functions
+        function addUserBalance(phone, amount) {
+            const user = users.find(u => u.phone === phone);
+            if (user) {
+                user.balance += amount;
+                
+                // Update display if it's the current user
+                if (currentUser && currentUser.phone === phone) {
+                    currentUser.balance = user.balance;
+                    updateUserDisplay();
+                }
+                
+                updateUserManagementDisplay();
+                alert(`${user.name} ၏ လက်ကျန်ငွေ ${amount.toLocaleString()} ကျပ် ထပ်ထည့်ပေးပြီးပါပြီ!\nလက်ကျန်ငွေ: ${user.balance.toLocaleString()} ကျပ်`);
+            }
+        }
+
+        function makeUserWin(phone) {
+            const user = users.find(u => u.phone === phone);
+            if (!user) return;
+            
+            // Find user's pending bets
+            const userBets = history.filter(item => 
+                item.user && item.user.phone === phone && item.status === 'အောင်မြင်ပါသည်'
+            );
+            
+            if (userBets.length === 0) {
+                alert(`${user.name} ၏ ထီထိုးမှု မရှိပါ`);
+                return;
+            }
+            
+            // Get the latest bet
+            const latestBet = userBets[0];
+            
+            if (latestBet.bets.length === 0) {
+                alert(`${user.name} ၏ ထီနံပါတ် မရှိပါ`);
+                return;
+            }
+            
+            // Use the first number from their latest bet
+            const winningNumber = latestBet.bets[0].number;
+            
+            // Set this number as the next available draw result
+            let nextDrawTime = null;
+            for (let time of ['09:30', '14:00', '16:30']) {
+                if (!todayResults[time]) {
+                    nextDrawTime = time;
+                    break;
+                }
+            }
+            
+            if (!nextDrawTime) {
+                // Clear all results and use first slot
+                todayResults = {
+                    '09:30': null,
+                    '14:00': null,
+                    '16:30': null
+                };
+                nextDrawTime = '09:30';
+            }
+            
+            // Set the winning number
+            todayResults[nextDrawTime] = winningNumber;
+            
+            // Calculate winnings (80x multiplier)
+            const totalWinnings = latestBet.bets.reduce((sum, bet) => {
+                if (bet.number === winningNumber) {
+                    return sum + (bet.amount * 80);
+                }
+                return sum;
+            }, 0);
+            
+            // Add winnings to user balance
+            user.balance += totalWinnings;
+            
+            // Update display if it's the current user
+            if (currentUser && currentUser.phone === phone) {
+                currentUser.balance = user.balance;
+                updateUserDisplay();
+            }
+            
+            // Update lottery display
+            updateLotteryResults();
+            checkWinningNumbers();
+            updateUserManagementDisplay();
+            
+            const timeDisplay = nextDrawTime === '09:30' ? 'မနက် 9:30' : 
+                               nextDrawTime === '14:00' ? 'နေ့လည် 2:00' : 'ညနေ 4:30';
+            
+            alert(`🎉 ${user.name} အနိုင်ရပြီ!\n\n` +
+                  `ထီရလဒ်: ${winningNumber} (${timeDisplay})\n` +
+                  `အနိုင်ရငွေ: ${totalWinnings.toLocaleString()} ကျပ်\n` +
+                  `လက်ကျန်ငွေ: ${user.balance.toLocaleString()} ကျပ်`);
+        }
+
+        function makeAllUsersWin() {
+            if (!confirm('အကောင့်အားလုံး အနိုင်ရစေမှာ သေချာပါသလား?')) return;
+            
+            const regularUsers = users.filter(user => user.type !== 'admin');
+            let winCount = 0;
+            
+            // Clear all results first
+            todayResults = {
+                '09:30': null,
+                '14:00': null,
+                '16:30': null
+            };
+            
+            regularUsers.forEach((user, index) => {
+                // Find user's latest approved bet
+                const userBets = history.filter(item => 
+                    item.user && item.user.phone === user.phone && item.status === 'အောင်မြင်ပါသည်'
+                );
+                
+                if (userBets.length > 0 && userBets[0].bets.length > 0) {
+                    const latestBet = userBets[0];
+                    const winningNumber = latestBet.bets[0].number;
+                    
+                    // Set result for available draw time
+                    const drawTimes = ['09:30', '14:00', '16:30'];
+                    const drawTime = drawTimes[index % 3];
+                    
+                    if (!todayResults[drawTime]) {
+                        todayResults[drawTime] = winningNumber;
+                        
+                        // Calculate winnings
+                        const totalWinnings = latestBet.bets.reduce((sum, bet) => {
+                            if (bet.number === winningNumber) {
+                                return sum + (bet.amount * 80);
+                            }
+                            return sum;
+                        }, 0);
+                        
+                        user.balance += totalWinnings;
+                        winCount++;
+                    }
+                }
+            });
+            
+            // Update current user display if needed
+            if (currentUser && currentUser.type !== 'admin') {
+                const updatedUser = users.find(u => u.phone === currentUser.phone);
+                if (updatedUser) {
+                    currentUser.balance = updatedUser.balance;
+                    updateUserDisplay();
+                }
+            }
+            
+            // Update displays
+            updateLotteryResults();
+            checkWinningNumbers();
+            updateUserManagementDisplay();
+            
+            alert(`🎉 အောင်မြင်ပါပြီ!\n\n${winCount} ယောက် အနိုင်ရပြီးပါပြီ!\nထီရလဒ်များ အလိုအလျောက် သတ်မှတ်ပေးပြီးပါပြီ။`);
+        }
+
+        function resetAllUserBalances() {
+            if (!confirm('အကောင့်အားလုံး၏ လက်ကျန်ငွေ 0 ကျပ် ပြန်လုပ်မှာ သေချာပါသလား?')) return;
+            
+            users.forEach(user => {
+                if (user.type !== 'admin') {
+                    user.balance = 0;
+                }
+            });
+            
+            // Update current user display if needed
+            if (currentUser && currentUser.type !== 'admin') {
+                currentUser.balance = 0;
+                updateUserDisplay();
+            }
+            
+            updateUserManagementDisplay();
+            alert('အကောင့်အားလုံး၏ လက်ကျန်ငွေ 0 ကျပ် ပြန်လုပ်ပြီးပါပြီ!');
+        }
+
         // Event listeners
         document.getElementById('addBetBtn').addEventListener('click', addBet);
         
@@ -1176,6 +1405,9 @@
                 document.getElementById('adminHistoryModal').classList.remove('hidden');
                 document.getElementById('adminHistoryModal').classList.add('flex');
                 document.getElementById('adminPassword').value = '';
+                
+                // Update user management display when admin panel opens
+                updateUserManagementDisplay();
             } else {
                 alert('Wrong password!');
             }
@@ -1393,5 +1625,5 @@
         // Show login screen on startup
         showLoginScreen();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97e97a4941b3a1bc',t:'MTc1Nzc4NTczMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f520d545fe8966',t:'MTc1NzkwNzg5NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
