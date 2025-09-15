@@ -738,6 +738,7 @@
             };
 
             users.push(newUser);
+            saveUsers(); // Save to localStorage
             return { success: true, message: 'အကောင့်ဖွင့်ခြင်း အောင်မြင်ပါသည်!' };
         }
 
@@ -1033,6 +1034,7 @@
                 } : null
             };
             history.unshift(historyItem);
+            saveHistory(); // Save to localStorage
             updateHistoryDisplay();
             updateAdminHistoryDisplay();
         }
@@ -1054,6 +1056,7 @@
                 } : null
             };
             transactionHistory.unshift(transaction);
+            saveTransactions(); // Save to localStorage
             updateTransactionHistoryDisplay();
             updateAdminTransactionDisplay();
         }
@@ -1065,6 +1068,7 @@
                 item.status = 'အောင်မြင်ပါသည်';
                 
                 // If user exists, no need to refund (already deducted)
+                saveHistory(); // Save to localStorage
                 updateHistoryDisplay();
                 updateAdminHistoryDisplay();
                 
@@ -1091,6 +1095,8 @@
                     }
                 }
                 
+                saveUsers(); // Save to localStorage
+                saveHistory(); // Save to localStorage
                 updateHistoryDisplay();
                 updateAdminHistoryDisplay();
                 
@@ -1122,6 +1128,8 @@
                     // In real system, this would trigger actual money transfer
                 }
                 
+                saveUsers(); // Save to localStorage
+                saveTransactions(); // Save to localStorage
                 updateTransactionHistoryDisplay();
                 updateAdminTransactionDisplay();
                 
@@ -1152,6 +1160,8 @@
                 }
                 // For deposits, no refund needed as money wasn't added yet
                 
+                saveUsers(); // Save to localStorage
+                saveTransactions(); // Save to localStorage
                 updateTransactionHistoryDisplay();
                 updateAdminTransactionDisplay();
                 
@@ -1432,6 +1442,7 @@
                     updateUserDisplay();
                 }
                 
+                saveUsers(); // Save to localStorage
                 updateUserManagementDisplay();
                 alert(`${user.name} ၏ လက်ကျန်ငွေ ${amount.toLocaleString()} ကျပ် ထပ်ထည့်ပေးပြီးပါပြီ!\nလက်ကျန်ငွေ: ${user.balance.toLocaleString()} ကျပ်`);
             }
@@ -1501,6 +1512,10 @@
                 updateUserDisplay();
             }
             
+            // Save changes to localStorage
+            saveUsers();
+            saveLotteryResults();
+            
             // Update lottery display
             updateLotteryResults();
             checkWinningNumbers();
@@ -1568,6 +1583,10 @@
                 }
             }
             
+            // Save changes to localStorage
+            saveUsers();
+            saveLotteryResults();
+            
             // Update displays
             updateLotteryResults();
             checkWinningNumbers();
@@ -1591,6 +1610,7 @@
                 updateUserDisplay();
             }
             
+            saveUsers(); // Save to localStorage
             updateUserManagementDisplay();
             alert('အကောင့်အားလုံး၏ လက်ကျန်ငွေ 0 ကျပ် ပြန်လုပ်ပြီးပါပြီ!');
         }
@@ -1631,6 +1651,14 @@
             if (confirm(`ထီထိုးမှု အတည်ပြုပါ\n\nစုစုပေါင်း: ${totalAmount.toLocaleString()} ကျပ်\nလက်ကျန်ငွေ: ${(currentUser.balance - totalAmount).toLocaleString()} ကျပ် ကျန်ရှိမည်\n\nထီထိုးမှာ သေချာပါသလား?`)) {
                 // Deduct balance
                 currentUser.balance -= totalAmount;
+                
+                // Update user in users array
+                const user = users.find(u => u.phone === currentUser.phone);
+                if (user) {
+                    user.balance = currentUser.balance;
+                }
+                
+                saveUsers(); // Save to localStorage
                 updateUserDisplay();
                 
                 // Add to history
@@ -2037,6 +2065,7 @@
                 if (user) {
                     user.balance = currentUser.balance;
                 }
+                saveUsers(); // Save to localStorage
                 updateUserDisplay();
 
                 // Add to transaction history for admin approval
@@ -2306,6 +2335,7 @@
                 if (user) {
                     user.balance = currentUser.balance;
                 }
+                saveUsers(); // Save to localStorage
                 updateUserDisplay();
                 
                 // Create winning notification
@@ -2530,6 +2560,47 @@
             document.getElementById('withdrawAmount').dispatchEvent(new Event('input'));
         }
 
+        // Data persistence functions
+        function saveUsers() {
+            localStorage.setItem('lotteryUsers', JSON.stringify(users));
+        }
+
+        function loadUsers() {
+            const savedUsers = localStorage.getItem('lotteryUsers');
+            if (savedUsers) {
+                users = JSON.parse(savedUsers);
+            }
+        }
+
+        function saveTransactions() {
+            localStorage.setItem('lotteryTransactions', JSON.stringify(transactionHistory));
+        }
+
+        function loadTransactions() {
+            const savedTransactions = localStorage.getItem('lotteryTransactions');
+            if (savedTransactions) {
+                transactionHistory = JSON.parse(savedTransactions);
+            }
+        }
+
+        function saveHistory() {
+            localStorage.setItem('lotteryHistory', JSON.stringify(history));
+        }
+
+        function loadHistory() {
+            const savedHistory = localStorage.getItem('lotteryHistory');
+            if (savedHistory) {
+                history = JSON.parse(savedHistory);
+            }
+        }
+
+        function initializeData() {
+            loadUsers();
+            loadTransactions();
+            loadHistory();
+            loadLotteryResults();
+        }
+
         // Initialize
         initializeData(); // Load all data from localStorage first
         updateBetDisplay();
@@ -2543,5 +2614,5 @@
         // Show login screen on startup
         showLoginScreen();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8a67c8158893b',t:'MTc1Nzk0NDgyNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8c5fb209d8955',t:'MTc1Nzk0NjExNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
