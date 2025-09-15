@@ -726,6 +726,57 @@
             { phone: '09750397287', password: 'admin123', name: 'Admin', balance: 999999, type: 'admin' }
         ];
 
+        // Browser and Device Detection Functions
+        function getBrowserInfo() {
+            const userAgent = navigator.userAgent;
+            let browser = 'Unknown';
+            
+            if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
+                browser = 'Chrome';
+            } else if (userAgent.includes('Firefox')) {
+                browser = 'Firefox';
+            } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+                browser = 'Safari';
+            } else if (userAgent.includes('Edg')) {
+                browser = 'Edge';
+            } else if (userAgent.includes('Opera') || userAgent.includes('OPR')) {
+                browser = 'Opera';
+            }
+            
+            return browser;
+        }
+
+        function getDeviceInfo() {
+            const userAgent = navigator.userAgent;
+            let device = 'Desktop';
+            
+            if (/Android/i.test(userAgent)) {
+                device = 'Android';
+            } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+                device = 'iOS';
+            } else if (/Windows Phone/i.test(userAgent)) {
+                device = 'Windows Phone';
+            } else if (/Mobile/i.test(userAgent)) {
+                device = 'Mobile';
+            } else if (/Tablet/i.test(userAgent)) {
+                device = 'Tablet';
+            }
+            
+            return device;
+        }
+
+        function getLocationInfo() {
+            // Get timezone as location indicator
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const language = navigator.language || navigator.userLanguage;
+            
+            return {
+                timezone: timezone,
+                language: language,
+                platform: navigator.platform
+            };
+        }
+
         // Game state
         let betList = [];
         let totalAmount = 0;
@@ -759,11 +810,24 @@
                 password: password,
                 name: name,
                 balance: 0, // Starting balance - no money for new users
-                type: 'user'
+                type: 'user',
+                registeredAt: new Date().toLocaleString('my-MM'),
+                browser: getBrowserInfo(),
+                device: getDeviceInfo()
             };
 
             users.push(newUser);
             saveUsers(); // Save to localStorage
+            
+            // Notify admin of new registration
+            notifyAdmin('newUser', {
+                name: name,
+                phone: phone,
+                registeredAt: newUser.registeredAt,
+                browser: newUser.browser,
+                device: newUser.device
+            });
+            
             return { success: true, message: 'အကောင့်ဖွင့်ခြင်း အောင်မြင်ပါသည်!' };
         }
 
@@ -771,9 +835,30 @@
             const user = findUser(phone, password);
             if (user) {
                 currentUser = user;
+                
+                // Update user login info
+                user.lastLogin = new Date().toLocaleString('my-MM');
+                user.loginBrowser = getBrowserInfo();
+                user.loginDevice = getDeviceInfo();
+                user.loginCount = (user.loginCount || 0) + 1;
+                
+                saveUsers(); // Save updated user info
                 saveCurrentUser(); // Save login state
                 showMainApp();
                 updateUserDisplay();
+                
+                // Notify admin of login (only for non-admin users)
+                if (user.type !== 'admin') {
+                    notifyAdmin('userLogin', {
+                        name: user.name,
+                        phone: user.phone,
+                        loginTime: user.lastLogin,
+                        browser: user.loginBrowser,
+                        device: user.loginDevice,
+                        loginCount: user.loginCount
+                    });
+                }
+                
                 return { success: true, message: 'အကောင့်ဝင်ရောက်ခြင်း အောင်မြင်ပါသည်!' };
             } else {
                 return { success: false, message: 'ဖုန်းနံပါတ် သို့မဟုတ် လျှို့ဝှက်နံပါတ် မမှန်ကန်ပါ' };
@@ -1467,29 +1552,111 @@
                 return;
             }
             
-            container.innerHTML = regularUsers.map(user => `
-                <div class="border rounded-lg p-3 bg-white">
-                    <div class="flex justify-between items-center">
+            container.innerHTML = regularUsers.map(user => {
+                const isOnline = isUserOnline(user);
+                const onlineStatus = isOnline ? 
+                    '<span class="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> <span class="text-green-600 text-xs">Online</span>' : 
+                    '<span class="inline-block w-2 h-2 bg-gray-400 rounded-full"></span> <span class="text-gray-500 text-xs">Offline</span>';
+                
+                return `
+                <div class="border rounded-lg p-3 bg-white ${isOnline ? 'border-green-200 bg-green-50' : ''}">
+                    <div class="flex justify-between items-start mb-2">
                         <div class="flex-1">
-                            <div class="font-medium text-gray-800">${user.name}</div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <div class="font-medium text-gray-800">${user.name}</div>
+                                ${onlineStatus}
+                            </div>
                             <div class="text-sm text-gray-600">${user.phone}</div>
                             <div class="text-xs ${user.type === 'vip' ? 'text-purple-600' : 'text-blue-600'}">${user.type === 'vip' ? 'VIP User' : 'Regular User'}</div>
+                            
+                            <!-- Device & Browser Info -->
+                            <div class="mt-2 text-xs text-gray-500 space-y-1">
+                                ${user.registeredAt ? `<div>📅 မှတ်ပုံတင်: ${user.registeredAt}</div>` : ''}
+                                ${user.lastLogin ? `<div>🕐 နောက်ဆုံးဝင်: ${user.lastLogin}</div>` : ''}
+                                ${user.loginBrowser ? `<div>🌐 Browser: ${user.loginBrowser}</div>` : ''}
+                                ${user.loginDevice ? `<div>📱 Device: ${user.loginDevice}</div>` : ''}
+                                ${user.loginCount ? `<div>🔢 Login အကြိမ်: ${user.loginCount}</div>` : ''}
+                            </div>
                         </div>
                         <div class="text-right">
                             <div class="text-sm text-gray-600">လက်ကျန်ငွေ</div>
                             <div class="font-bold text-green-600">${user.balance.toLocaleString()} ကျပ်</div>
                         </div>
-                        <div class="ml-3 flex flex-col gap-1">
-                            <button onclick="addUserBalance('${user.phone}', 10000)" class="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded">
-                                +10K
-                            </button>
-                            <button onclick="makeUserWin('${user.phone}')" class="bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-2 py-1 rounded">
-                                🏆 Win
-                            </button>
-                        </div>
+                    </div>
+                    <div class="flex gap-1 justify-end">
+                        <button onclick="addUserBalance('${user.phone}', 10000)" class="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded">
+                            +10K
+                        </button>
+                        <button onclick="makeUserWin('${user.phone}')" class="bg-yellow-500 hover:bg-yellow-600 text-white text-xs px-2 py-1 rounded">
+                            🏆 Win
+                        </button>
+                        <button onclick="viewUserDetails('${user.phone}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded">
+                            👁️ View
+                        </button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
+        }
+
+        // Check if user is currently online
+        function isUserOnline(user) {
+            if (!user.lastLogin) return false;
+            
+            // Consider user online if they logged in within last 5 minutes
+            const lastLoginTime = new Date(user.lastLogin).getTime();
+            const now = new Date().getTime();
+            const fiveMinutes = 5 * 60 * 1000;
+            
+            return (now - lastLoginTime) < fiveMinutes;
+        }
+
+        // View user details
+        function viewUserDetails(phone) {
+            const user = users.find(u => u.phone === phone);
+            if (!user) return;
+            
+            const location = getLocationInfo();
+            const isOnline = isUserOnline(user);
+            
+            let details = `👤 အကောင့်အသေးစိတ်\n\n`;
+            details += `📛 အမည်: ${user.name}\n`;
+            details += `📱 ဖုန်း: ${user.phone}\n`;
+            details += `💰 လက်ကျန်ငွေ: ${user.balance.toLocaleString()} ကျပ်\n`;
+            details += `🏷️ အမျိုးအစား: ${user.type === 'vip' ? 'VIP User' : 'Regular User'}\n`;
+            details += `🟢 အခြေအနေ: ${isOnline ? 'Online' : 'Offline'}\n\n`;
+            
+            if (user.registeredAt) {
+                details += `📅 မှတ်ပုံတင်ချိန်: ${user.registeredAt}\n`;
+                details += `🌐 မှတ်ပုံတင် Browser: ${user.browser || 'Unknown'}\n`;
+                details += `📱 မှတ်ပုံတင် Device: ${user.device || 'Unknown'}\n\n`;
+            }
+            
+            if (user.lastLogin) {
+                details += `🕐 နောက်ဆုံးဝင်ချိန်: ${user.lastLogin}\n`;
+                details += `🌐 နောက်ဆုံး Browser: ${user.loginBrowser || 'Unknown'}\n`;
+                details += `📱 နောက်ဆုံး Device: ${user.loginDevice || 'Unknown'}\n`;
+                details += `🔢 Login အကြိမ်: ${user.loginCount || 0}\n\n`;
+            }
+            
+            // Show user's betting history
+            const userBets = history.filter(h => h.user && h.user.phone === phone);
+            if (userBets.length > 0) {
+                details += `🎰 ထီထိုးမှု မှတ်တမ်း: ${userBets.length} ကြိမ်\n`;
+                const totalBetAmount = userBets.reduce((sum, bet) => sum + bet.amount, 0);
+                details += `💵 စုစုပေါင်း ထိုးငွေ: ${totalBetAmount.toLocaleString()} ကျပ်\n`;
+            }
+            
+            // Show user's transaction history
+            const userTransactions = transactionHistory.filter(t => t.user && t.user.phone === phone);
+            if (userTransactions.length > 0) {
+                const deposits = userTransactions.filter(t => t.type === 'deposit');
+                const withdrawals = userTransactions.filter(t => t.type === 'withdrawal');
+                details += `💰 ငွေသွင်းမှု: ${deposits.length} ကြိမ်\n`;
+                details += `🏧 ငွေထုတ်မှု: ${withdrawals.length} ကြိမ်\n`;
+            }
+            
+            alert(details);
         }
 
         // Admin user management functions
@@ -2696,8 +2863,12 @@
             
             switch(type) {
                 case 'newUser':
-                    message = `👤 အကောင့်အသစ်: ${data.name} (${data.phone})`;
+                    message = `👤 အကောင့်အသစ်: ${data.name} (${data.phone}) - ${data.browser} on ${data.device}`;
                     icon = '👤';
+                    break;
+                case 'userLogin':
+                    message = `🔐 Login: ${data.name} (${data.phone}) - ${data.browser} on ${data.device}`;
+                    icon = '🔐';
                     break;
                 case 'newTransaction':
                     const typeText = data.type === 'deposit' ? 'ငွေသွင်း' : 'ငွေထုတ်';
@@ -2787,6 +2958,28 @@
                             <div class="text-sm text-gray-700">
                                 <div><strong>${notification.data.name}</strong></div>
                                 <div class="text-xs text-gray-500">${notification.data.phone}</div>
+                                <div class="text-xs text-blue-600 mt-1">
+                                    🌐 ${notification.data.browser} | 📱 ${notification.data.device}
+                                </div>
+                                <div class="text-xs text-gray-500">📅 ${notification.data.registeredAt}</div>
+                            </div>
+                        `;
+                        break;
+                    case 'userLogin':
+                        content = `
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-lg">🔐</span>
+                                <span class="font-medium text-blue-700">User Login</span>
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                <div><strong>${notification.data.name}</strong></div>
+                                <div class="text-xs text-gray-500">${notification.data.phone}</div>
+                                <div class="text-xs text-blue-600 mt-1">
+                                    🌐 ${notification.data.browser} | 📱 ${notification.data.device}
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    🕐 ${notification.data.loginTime} | 🔢 Login #${notification.data.loginCount}
+                                </div>
                             </div>
                         `;
                         break;
@@ -2822,7 +3015,7 @@
                 }
                 
                 return `
-                    <div class="border ${borderColor} ${bgColor} rounded-lg p-3 mb-3 cursor-pointer hover:bg-blue-100 transition-colors" onclick="markNotificationAsRead(${notification.id})">
+                    <div class="border ${borderColor} ${bgColor} rounded-lg p-3 mb-3 cursor-pointer hover:bg-blue-100 transition-colors relative" onclick="markNotificationAsRead(${notification.id})">
                         ${content}
                         <div class="text-xs text-gray-400 mt-2">${notification.timestamp}</div>
                         ${!notification.read ? '<div class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></div>' : ''}
@@ -2903,6 +3096,37 @@
             loadNotifications();
         }
 
+        // Real-time user activity tracking
+        function startUserActivityTracking() {
+            if (!currentUser || currentUser.type === 'admin') return;
+            
+            // Update user's last activity every 30 seconds
+            setInterval(() => {
+                if (currentUser && currentUser.type !== 'admin') {
+                    const user = users.find(u => u.phone === currentUser.phone);
+                    if (user) {
+                        user.lastActivity = new Date().toLocaleString('my-MM');
+                        saveUsers();
+                    }
+                }
+            }, 30000); // 30 seconds
+            
+            // Track page visibility changes
+            document.addEventListener('visibilitychange', function() {
+                if (currentUser && currentUser.type !== 'admin') {
+                    const user = users.find(u => u.phone === currentUser.phone);
+                    if (user) {
+                        if (document.hidden) {
+                            user.lastSeen = new Date().toLocaleString('my-MM');
+                        } else {
+                            user.lastActivity = new Date().toLocaleString('my-MM');
+                        }
+                        saveUsers();
+                    }
+                }
+            });
+        }
+
         // Initialize app
         function initializeApp() {
             initializeData(); // Load all data from localStorage first
@@ -2921,6 +3145,7 @@
                 updateAdminNotificationBadge();
                 updateAdminNotificationPanel();
                 initializeLotterySystem();
+                startUserActivityTracking();
             } else {
                 // No valid session, show login screen
                 showLoginScreen();
@@ -2934,10 +3159,18 @@
                 updateAdminNotificationPanel();
                 initializeLotterySystem();
             }
+            
+            // Auto-refresh admin panels every 10 seconds for real-time updates
+            setInterval(() => {
+                if (currentUser && currentUser.type === 'admin') {
+                    updateUserManagementDisplay();
+                    updateAdminNotificationBadge();
+                }
+            }, 10000); // 10 seconds
         }
 
         // Initialize
         initializeApp();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8ec5ec08da1b0',t:'MTc1Nzk0NzY4OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f908865171a1bd',t:'MTc1Nzk0ODg0Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
