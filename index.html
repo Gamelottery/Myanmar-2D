@@ -1212,6 +1212,14 @@
             saveHistory(); // Save to localStorage
             updateHistoryDisplay();
             updateAdminHistoryDisplay();
+            
+            // Notify admin of new bet
+            notifyAdmin('newBet', {
+                bets: bets,
+                amount: amount,
+                user: historyItem.user,
+                senderPhone: senderPhone
+            });
         }
 
         // Add transaction to history (deposits/withdrawals)
@@ -1234,6 +1242,15 @@
             saveTransactions(); // Save to localStorage
             updateTransactionHistoryDisplay();
             updateAdminTransactionDisplay();
+            
+            // Notify admin of new transaction
+            notifyAdmin('newTransaction', {
+                type: type,
+                amount: amount,
+                method: method,
+                user: transaction.user,
+                details: details
+            });
         }
 
         // Approve transaction
@@ -2955,6 +2972,7 @@
         function saveLotteryResults() {
             localStorage.setItem('lotteryResults', JSON.stringify(todayResults));
             localStorage.setItem('lotteryResultsDate', new Date().toDateString());
+            syncDataToServer(); // Sync to all devices
         }
 
         function loadLotteryResults() {
@@ -2977,33 +2995,165 @@
             }
         }
 
-        // Listen for lottery result changes from other tabs/windows
+        // Enhanced real-time updates system
         function setupRealTimeUpdates() {
+            // Listen for storage changes from other tabs/devices
             window.addEventListener('storage', function(e) {
-                if (e.key === 'lotteryResults') {
-                    // Another tab/window updated lottery results
-                    loadLotteryResults();
-                    updateLotteryResults();
-                    checkWinningNumbers();
-                    
-                    // Show notification to user
-                    if (currentUser && currentUser.type !== 'admin') {
-                        showLotteryNotification('🎰 ထီရလဒ် အပ်ဒိတ် ရရှိပါပြီ!', 'success');
+                try {
+                    if (e.key === 'lotteryResults' || e.key === 'lotterySync') {
+                        // Reload all data from sync
+                        loadAllDataFromSync();
+                        
+                        // Update all displays
+                        updateLotteryResults();
+                        checkWinningNumbers();
+                        updateHistoryDisplay();
+                        updateUserDisplay();
+                        
+                        // Update admin displays if admin is logged in
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateUserManagementDisplay();
+                            updateAdminTransactionDisplay();
+                            updateAdminHistoryDisplay();
+                            updateAdminNotificationBadge();
+                        }
+                        
+                        // Show notification to user
+                        if (currentUser && currentUser.type !== 'admin') {
+                            showLotteryNotification('🔄 အချက်အလက် အပ်ဒိတ် ရရှိပါပြီ!', 'success');
+                        }
                     }
+                    
+                    // Handle specific data updates
+                    if (e.key === 'lotteryUsers') {
+                        loadUsers();
+                        updateUserDisplay();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateUserManagementDisplay();
+                        }
+                    }
+                    
+                    if (e.key === 'lotteryTransactions') {
+                        loadTransactions();
+                        updateHistoryDisplay();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateAdminTransactionDisplay();
+                        }
+                    }
+                    
+                    if (e.key === 'lotteryHistory') {
+                        loadHistory();
+                        updateHistoryDisplay();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateAdminHistoryDisplay();
+                        }
+                    }
+                    
+                    if (e.key === 'adminNotifications') {
+                        loadNotifications();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateAdminNotificationBadge();
+                            updateAdminNotificationPanel();
+                        }
+                    }
+                } catch (error) {
+                    console.log('Storage event error:', error);
                 }
             });
             
-            // Also check for updates every 2 seconds for same-tab updates
+            // Aggressive polling for cross-device sync (every 3 seconds)
             setInterval(() => {
-                const currentResults = JSON.stringify(todayResults);
-                loadLotteryResults();
-                const newResults = JSON.stringify(todayResults);
-                
-                if (currentResults !== newResults) {
-                    updateLotteryResults();
-                    checkWinningNumbers();
+                try {
+                    // Store current state
+                    const currentUsersState = JSON.stringify(users);
+                    const currentHistoryState = JSON.stringify(history);
+                    const currentTransactionsState = JSON.stringify(transactionHistory);
+                    const currentResultsState = JSON.stringify(todayResults);
+                    const currentNotificationsState = JSON.stringify(adminNotifications);
+                    
+                    // Load latest data
+                    loadAllDataFromSync();
+                    
+                    // Check for changes and update displays
+                    let hasChanges = false;
+                    
+                    if (currentUsersState !== JSON.stringify(users)) {
+                        updateUserDisplay();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateUserManagementDisplay();
+                        }
+                        hasChanges = true;
+                    }
+                    
+                    if (currentHistoryState !== JSON.stringify(history)) {
+                        updateHistoryDisplay();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateAdminHistoryDisplay();
+                        }
+                        hasChanges = true;
+                    }
+                    
+                    if (currentTransactionsState !== JSON.stringify(transactionHistory)) {
+                        updateHistoryDisplay();
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateAdminTransactionDisplay();
+                        }
+                        hasChanges = true;
+                    }
+                    
+                    if (currentResultsState !== JSON.stringify(todayResults)) {
+                        updateLotteryResults();
+                        checkWinningNumbers();
+                        hasChanges = true;
+                        
+                        // Show lottery result notification
+                        if (currentUser && currentUser.type !== 'admin') {
+                            showLotteryNotification('🎰 ထီရလဒ် အပ်ဒိတ် ရရှိပါပြီ!', 'success');
+                        }
+                    }
+                    
+                    if (currentNotificationsState !== JSON.stringify(adminNotifications)) {
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateAdminNotificationBadge();
+                            updateAdminNotificationPanel();
+                        }
+                        hasChanges = true;
+                    }
+                    
+                    // Update current user balance if changed
+                    if (currentUser && hasChanges) {
+                        const updatedUser = users.find(u => u.phone === currentUser.phone);
+                        if (updatedUser && updatedUser.balance !== currentUser.balance) {
+                            currentUser.balance = updatedUser.balance;
+                            updateUserDisplay();
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.log('Polling sync error:', error);
                 }
-            }, 2000);
+            }, 3000); // Check every 3 seconds
+            
+            // Additional fast polling for lottery results (every 1 second)
+            setInterval(() => {
+                try {
+                    const currentResults = JSON.stringify(todayResults);
+                    loadLotteryResults();
+                    const newResults = JSON.stringify(todayResults);
+                    
+                    if (currentResults !== newResults) {
+                        updateLotteryResults();
+                        checkWinningNumbers();
+                        
+                        // Immediate notification for lottery results
+                        if (currentUser && currentUser.type !== 'admin') {
+                            showLotteryNotification('⚡ ထီရလဒ် ထွက်ပါပြီ!', 'success');
+                        }
+                    }
+                } catch (error) {
+                    console.log('Fast lottery polling error:', error);
+                }
+            }, 1000); // Check every 1 second for lottery results
         }
 
         // Initialize lottery system
@@ -3302,32 +3452,88 @@
 
         function initializeData() {
             try {
-                loadUsers();
-                loadTransactions();
-                loadHistory();
-                loadLotteryResults();
-                loadNotifications();
+                // Load all data using enhanced sync system
+                loadAllDataFromSync();
             } catch (error) {
                 console.log('Data initialization error:', error);
+                // Fallback to individual loading
+                try {
+                    loadUsers();
+                    loadTransactions();
+                    loadHistory();
+                    loadLotteryResults();
+                    loadNotifications();
+                } catch (fallbackError) {
+                    console.log('Fallback data loading error:', fallbackError);
+                }
             }
         }
 
         // Cross-device synchronization system
         function syncDataToServer() {
             try {
-                // Simulate server sync by using localStorage with timestamp
+                // Create a comprehensive sync object with timestamp
                 const syncData = {
                     users: users,
                     history: history,
                     transactionHistory: transactionHistory,
                     todayResults: todayResults,
                     adminNotifications: adminNotifications,
-                    lastSync: new Date().getTime()
+                    lastSync: new Date().getTime(),
+                    syncId: Date.now() + Math.random() // Unique sync ID
                 };
                 
+                // Save to multiple localStorage keys for better cross-device sync
                 localStorage.setItem('lotterySync', JSON.stringify(syncData));
+                localStorage.setItem('lotteryUsers', JSON.stringify(users));
+                localStorage.setItem('lotteryTransactions', JSON.stringify(transactionHistory));
+                localStorage.setItem('lotteryHistory', JSON.stringify(history));
+                localStorage.setItem('lotteryResults', JSON.stringify(todayResults));
+                localStorage.setItem('lotteryResultsDate', new Date().toDateString());
+                localStorage.setItem('adminNotifications', JSON.stringify(adminNotifications));
+                
+                // Trigger storage event for same-origin cross-tab communication
+                window.dispatchEvent(new StorageEvent('storage', {
+                    key: 'lotterySync',
+                    newValue: JSON.stringify(syncData),
+                    url: window.location.href
+                }));
+                
             } catch (error) {
                 console.log('Sync error:', error);
+            }
+        }
+
+        // Enhanced cross-device data loading
+        function loadAllDataFromSync() {
+            try {
+                // Load from individual keys first
+                loadUsers();
+                loadTransactions();
+                loadHistory();
+                loadLotteryResults();
+                loadNotifications();
+                
+                // Then check for newer sync data
+                const syncData = localStorage.getItem('lotterySync');
+                if (syncData) {
+                    const parsed = JSON.parse(syncData);
+                    
+                    // Check if sync data is newer than current data
+                    const syncTime = parsed.lastSync || 0;
+                    const currentTime = Date.now();
+                    
+                    // If sync data is recent (within 1 hour), use it
+                    if (currentTime - syncTime < 3600000) {
+                        if (parsed.users) users = parsed.users;
+                        if (parsed.history) history = parsed.history;
+                        if (parsed.transactionHistory) transactionHistory = parsed.transactionHistory;
+                        if (parsed.todayResults) todayResults = parsed.todayResults;
+                        if (parsed.adminNotifications) adminNotifications = parsed.adminNotifications;
+                    }
+                }
+            } catch (error) {
+                console.log('Load sync data error:', error);
             }
         }
 
@@ -3432,26 +3638,62 @@
             }
         }
 
-        // Simple initialization
+        // Enhanced initialization with cross-device sync
         function safeInitialize() {
             try {
-                // Load data first
-                loadUsers();
-                loadLotteryResults();
+                // Initialize data with enhanced sync system
+                initializeData();
                 
                 // Initialize lottery display
                 updateCurrentDate();
                 updateLotteryResults();
                 updateNextDrawTime();
                 
-                // Show login screen by default
-                showLoginScreen();
+                // Setup real-time updates immediately
+                setupRealTimeUpdates();
                 
-                console.log('App initialized successfully');
+                // Try to auto-login from saved session
+                if (loadCurrentUser()) {
+                    // User was previously logged in and session is still valid
+                    showMainApp();
+                    updateUserDisplay();
+                    
+                    // Start user activity tracking
+                    startUserActivityTracking();
+                    
+                    // Update all displays for logged in user
+                    updateHistoryDisplay();
+                    updateAdminNotificationBadge();
+                    
+                    // If admin, update admin displays
+                    if (currentUser && currentUser.type === 'admin') {
+                        updateUserManagementDisplay();
+                        updateAdminTransactionDisplay();
+                        updateAdminHistoryDisplay();
+                        updateAdminNotificationPanel();
+                    }
+                } else {
+                    // No valid session, show login screen
+                    showLoginScreen();
+                }
+                
+                // Initialize game displays
+                updateBetDisplay();
+                updateTotal();
+                updatePayButton();
+                
+                console.log('App initialized successfully with cross-device sync');
             } catch (error) {
                 console.log('Safe initialization error:', error);
-                // Even if there's an error, show login screen
+                // Even if there's an error, show login screen and basic functionality
                 showLoginScreen();
+                try {
+                    updateCurrentDate();
+                    updateLotteryResults();
+                    setupRealTimeUpdates();
+                } catch (basicError) {
+                    console.log('Basic initialization error:', basicError);
+                }
             }
         }
 
@@ -3569,5 +3811,5 @@
             safeInitialize();
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f96fe5160e8943',t:'MTc1Nzk1MzA3Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f9923070ba8957',t:'MTc1Nzk1NDQ4MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
