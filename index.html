@@ -663,9 +663,17 @@
                         </div>
                     </div>
 
-                    <!-- Pending Approvals -->
+                    <!-- Pending Deposit/Withdrawal Approvals -->
+                    <div class="bg-orange-50 rounded-lg p-4 mb-6">
+                        <h4 class="text-lg font-bold text-gray-800 mb-4">💳 ငွေသွင်း/ထုတ် အတည်ပြုရန်</h4>
+                        <div id="adminTransactionContent" class="space-y-4">
+                            <!-- Admin transaction items will be added here -->
+                        </div>
+                    </div>
+
+                    <!-- Pending Lottery Approvals -->
                     <div class="bg-blue-50 rounded-lg p-4">
-                        <h4 class="text-lg font-bold text-gray-800 mb-4">📋 Pending Approvals</h4>
+                        <h4 class="text-lg font-bold text-gray-800 mb-4">🎰 ထီထိုးမှု အတည်ပြုရန်</h4>
                         <div id="adminHistoryContent" class="space-y-4">
                             <!-- Admin history items will be added here -->
                         </div>
@@ -698,6 +706,7 @@
         let betList = [];
         let totalAmount = 0;
         let history = [];
+        let transactionHistory = []; // For deposits and withdrawals
 
         // Authentication Functions
         function validatePhone(phone) {
@@ -1028,6 +1037,27 @@
             updateAdminHistoryDisplay();
         }
 
+        // Add transaction to history (deposits/withdrawals)
+        function addTransactionToHistory(type, amount, method, details = {}, status = 'လုပ်ဆောင်နေဆဲ') {
+            const transaction = {
+                id: Date.now(),
+                type: type, // 'deposit' or 'withdrawal'
+                date: new Date().toLocaleString('my-MM'),
+                amount: amount,
+                method: method, // 'wavepay' or 'kpay'
+                status: status,
+                details: details,
+                user: currentUser ? {
+                    name: currentUser.name,
+                    phone: currentUser.phone,
+                    type: currentUser.type
+                } : null
+            };
+            transactionHistory.unshift(transaction);
+            updateTransactionHistoryDisplay();
+            updateAdminTransactionDisplay();
+        }
+
         // Approve transaction
         function approveTransaction(id) {
             const item = history.find(h => h.id === id);
@@ -1068,55 +1098,164 @@
             }
         }
 
+        // Approve deposit/withdrawal transaction
+        function approveDepositWithdrawal(id) {
+            const transaction = transactionHistory.find(t => t.id === id);
+            if (transaction) {
+                transaction.status = 'အောင်မြင်ပါသည်';
+                
+                if (transaction.type === 'deposit') {
+                    // Add money to user balance
+                    if (transaction.user) {
+                        const user = users.find(u => u.phone === transaction.user.phone);
+                        if (user) {
+                            user.balance += transaction.amount;
+                            // Update display if it's the current user
+                            if (currentUser && currentUser.phone === user.phone) {
+                                currentUser.balance = user.balance;
+                                updateUserDisplay();
+                            }
+                        }
+                    }
+                } else if (transaction.type === 'withdrawal') {
+                    // Money already deducted, just approve
+                    // In real system, this would trigger actual money transfer
+                }
+                
+                updateTransactionHistoryDisplay();
+                updateAdminTransactionDisplay();
+                
+                const typeText = transaction.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
+                alert(`${typeText} အတည်ပြုပြီးပါပြီ!\n\nအကောင့်ပိုင်ရှင်: ${transaction.user ? transaction.user.name : 'Unknown User'}\nငွေပမာဏ: ${transaction.amount.toLocaleString()} ကျပ်`);
+            }
+        }
+
+        // Reject deposit/withdrawal transaction
+        function rejectDepositWithdrawal(id) {
+            const transaction = transactionHistory.find(t => t.id === id);
+            if (transaction) {
+                transaction.status = 'ပယ်ဖျက်ပြီး';
+                
+                if (transaction.type === 'withdrawal') {
+                    // Refund balance to user for rejected withdrawal
+                    if (transaction.user) {
+                        const user = users.find(u => u.phone === transaction.user.phone);
+                        if (user) {
+                            user.balance += transaction.amount;
+                            // Update display if it's the current user
+                            if (currentUser && currentUser.phone === user.phone) {
+                                currentUser.balance = user.balance;
+                                updateUserDisplay();
+                            }
+                        }
+                    }
+                }
+                // For deposits, no refund needed as money wasn't added yet
+                
+                updateTransactionHistoryDisplay();
+                updateAdminTransactionDisplay();
+                
+                const typeText = transaction.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
+                const refundText = transaction.type === 'withdrawal' ? `\nငွေပြန်အမ်း: ${transaction.amount.toLocaleString()} ကျပ်` : '';
+                alert(`${typeText} ပယ်ဖျက်ပြီးပါပြီ!\n\nအကောင့်ပိုင်ရှင်: ${transaction.user ? transaction.user.name : 'Unknown User'}${refundText}`);
+            }
+        }
+
         // Update history display
         function updateHistoryDisplay() {
             const container = document.getElementById('historyContent');
             
-            if (history.length === 0) {
+            // Combine lottery history and transaction history for user view
+            const allHistory = [
+                ...history.map(item => ({...item, type: 'lottery'})),
+                ...transactionHistory.filter(t => !currentUser || t.user?.phone === currentUser.phone).map(item => ({...item, type: 'transaction'}))
+            ].sort((a, b) => b.id - a.id);
+            
+            if (allHistory.length === 0) {
                 container.innerHTML = '<p class="text-center text-gray-500">မှတ်တမ်းမရှိပါ</p>';
                 return;
             }
             
-            container.innerHTML = history.map(item => {
-                // Check if this item has any winning bets
-                const hasWinnings = item.bets.some(bet => bet.isWinner);
-                const totalWinnings = item.bets.reduce((sum, bet) => {
-                    return sum + (bet.isWinner ? bet.winAmount || 0 : 0);
-                }, 0);
-                
-                return `
-                <div class="border rounded-lg p-4 ${hasWinnings ? 'bg-yellow-50 border-yellow-300' : ''}">
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="text-sm text-gray-600">${item.date}</div>
-                        <div class="text-sm font-medium ${
-                            item.status === 'လုပ်ဆောင်နေဆဲ' ? 'text-orange-600' : 
-                            item.status === 'အောင်မြင်ပါသည်' ? 'text-green-600' : 'text-red-600'
-                        }">
-                            ${item.status}
+            container.innerHTML = allHistory.map(item => {
+                if (item.type === 'lottery') {
+                    // Check if this item has any winning bets
+                    const hasWinnings = item.bets.some(bet => bet.isWinner);
+                    const totalWinnings = item.bets.reduce((sum, bet) => {
+                        return sum + (bet.isWinner ? bet.winAmount || 0 : 0);
+                    }, 0);
+                    
+                    return `
+                    <div class="border rounded-lg p-4 ${hasWinnings ? 'bg-yellow-50 border-yellow-300' : ''}">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="text-sm text-gray-600">🎰 ${item.date}</div>
+                            <div class="text-sm font-medium ${
+                                item.status === 'လုပ်ဆောင်နေဆဲ' ? 'text-orange-600' : 
+                                item.status === 'အောင်မြင်ပါသည်' ? 'text-green-600' : 'text-red-600'
+                            }">
+                                ${item.status}
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-sm text-gray-600 mb-1">ထိုးထားသော နံပါတ်များ:</div>
+                            <div class="flex flex-wrap gap-1">
+                                ${item.bets.map(bet => {
+                                    const isWinner = bet.isWinner;
+                                    const bgColor = isWinner ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
+                                    const winnerIcon = isWinner ? ' 🏆' : '';
+                                    const drawTime = bet.winningDraw ? 
+                                        (bet.winningDraw === '09:30' ? ' (မနက်)' : 
+                                         bet.winningDraw === '14:00' ? ' (နေ့လည်)' : ' (ညနေ)') : '';
+                                    
+                                    return `<span class="${bgColor} px-2 py-1 rounded text-xs">${bet.number} (${bet.amount}ကျပ်)${winnerIcon}${drawTime}</span>`;
+                                }).join('')}
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-gray-600">ထိုးငွေ: ${item.amount.toLocaleString()} ကျပ်</div>
+                            ${hasWinnings ? `<div class="font-bold text-green-600 text-lg">🎉 အနိုင်ရငွေ: ${totalWinnings.toLocaleString()} ကျပ်</div>` : ''}
                         </div>
                     </div>
-                    <div class="mb-2">
-                        <div class="text-sm text-gray-600 mb-1">ထိုးထားသော နံပါတ်များ:</div>
-                        <div class="flex flex-wrap gap-1">
-                            ${item.bets.map(bet => {
-                                const isWinner = bet.isWinner;
-                                const bgColor = isWinner ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800';
-                                const winnerIcon = isWinner ? ' 🏆' : '';
-                                const drawTime = bet.winningDraw ? 
-                                    (bet.winningDraw === '09:30' ? ' (မနက်)' : 
-                                     bet.winningDraw === '14:00' ? ' (နေ့လည်)' : ' (ညနေ)') : '';
-                                
-                                return `<span class="${bgColor} px-2 py-1 rounded text-xs">${bet.number} (${bet.amount}ကျပ်)${winnerIcon}${drawTime}</span>`;
-                            }).join('')}
+                `;
+                } else {
+                    // Transaction history
+                    const typeIcon = item.type === 'deposit' ? '💰' : '🏧';
+                    const typeText = item.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
+                    const methodIcon = item.method === 'wavepay' ? '🌊' : '💜';
+                    const methodName = item.method === 'wavepay' ? 'Wave Pay' : 'K Pay';
+                    
+                    return `
+                    <div class="border rounded-lg p-4 ${item.type === 'deposit' ? 'bg-green-50' : 'bg-blue-50'}">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="text-sm text-gray-600">${typeIcon} ${item.date}</div>
+                            <div class="text-sm font-medium ${
+                                item.status === 'လုပ်ဆောင်နေဆဲ' ? 'text-orange-600' : 
+                                item.status === 'အောင်မြင်ပါသည်' ? 'text-green-600' : 'text-red-600'
+                            }">
+                                ${item.status}
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-sm font-medium text-gray-800">${typeText}</div>
+                            <div class="text-sm text-gray-600">${methodIcon} ${methodName}</div>
+                            ${item.details.transactionId ? `<div class="text-xs text-gray-500">Transaction ID: ${item.details.transactionId}</div>` : ''}
+                            ${item.details.accountNumber ? `<div class="text-xs text-gray-500">အကောင့်: ${item.details.accountNumber}</div>` : ''}
+                            ${item.details.accountName ? `<div class="text-xs text-gray-500">အမည်: ${item.details.accountName}</div>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold ${item.type === 'deposit' ? 'text-green-600' : 'text-blue-600'}">
+                                ${item.type === 'deposit' ? '+' : '-'}${item.amount.toLocaleString()} ကျပ်
+                            </div>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <div class="font-bold text-gray-600">ထိုးငွေ: ${item.amount.toLocaleString()} ကျပ်</div>
-                        ${hasWinnings ? `<div class="font-bold text-green-600 text-lg">🎉 အနိုင်ရငွေ: ${totalWinnings.toLocaleString()} ကျပ်</div>` : ''}
-                    </div>
-                </div>
-            `;
+                `;
+                }
             }).join('');
+        }
+
+        // Update transaction history display (for users)
+        function updateTransactionHistoryDisplay() {
+            // This will be called to refresh the combined history display
+            updateHistoryDisplay();
         }
 
         // Update admin history display
@@ -1167,6 +1306,83 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        // Update admin transaction display (for deposits/withdrawals)
+        function updateAdminTransactionDisplay() {
+            const container = document.getElementById('adminTransactionContent');
+            const pendingTransactions = transactionHistory.filter(t => t.status === 'လုပ်ဆောင်နေဆဲ');
+            
+            if (pendingTransactions.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">အတည်ပြုရန် ငွေသွင်း/ထုတ် မရှိပါ</p>';
+                return;
+            }
+            
+            container.innerHTML = pendingTransactions.map(transaction => {
+                const typeIcon = transaction.type === 'deposit' ? '💰' : '🏧';
+                const typeText = transaction.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
+                const methodIcon = transaction.method === 'wavepay' ? '🌊' : '💜';
+                const methodName = transaction.method === 'wavepay' ? 'Wave Pay' : 'K Pay';
+                const bgColor = transaction.type === 'deposit' ? 'bg-green-50' : 'bg-blue-50';
+                
+                return `
+                <div class="border rounded-lg p-4 ${bgColor}">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="text-sm text-gray-600">${typeIcon} ${transaction.date}</div>
+                        <div class="text-sm font-medium text-orange-600">
+                            ${transaction.status}
+                        </div>
+                    </div>
+                    
+                    ${transaction.user ? `
+                    <div class="mb-3 bg-white rounded p-3">
+                        <div class="text-sm text-gray-600">👤 အကောင့်ပိုင်ရှင်:</div>
+                        <div class="text-sm font-medium text-gray-800">${transaction.user.name} (${transaction.user.phone})</div>
+                        <div class="text-xs text-gray-600">${transaction.user.type === 'admin' ? 'Admin' : transaction.user.type === 'vip' ? 'VIP User' : 'Regular User'}</div>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="mb-3">
+                        <div class="text-lg font-bold text-gray-800 mb-2">${typeText}</div>
+                        <div class="text-sm text-gray-600 mb-1">${methodIcon} ${methodName}</div>
+                        
+                        ${transaction.details.transactionId ? `
+                        <div class="bg-yellow-100 rounded p-2 mb-2">
+                            <div class="text-xs text-yellow-800 font-medium">Transaction ID:</div>
+                            <div class="text-sm font-mono text-yellow-900">${transaction.details.transactionId}</div>
+                        </div>
+                        ` : ''}
+                        
+                        ${transaction.details.accountNumber ? `
+                        <div class="text-xs text-gray-600">လက်ခံမည့် အကောင့်: ${transaction.details.accountNumber}</div>
+                        ` : ''}
+                        
+                        ${transaction.details.accountName ? `
+                        <div class="text-xs text-gray-600">အကောင့်ပိုင်ရှင်: ${transaction.details.accountName}</div>
+                        ` : ''}
+                        
+                        ${transaction.details.screenshot ? `
+                        <div class="text-xs text-green-600 mt-1">📸 Screenshot ပါဝင်သည်</div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="mb-3 text-center">
+                        <div class="text-2xl font-bold ${transaction.type === 'deposit' ? 'text-green-600' : 'text-blue-600'}">
+                            ${transaction.type === 'deposit' ? '+' : '-'}${transaction.amount.toLocaleString()} ကျပ်
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="approveDepositWithdrawal(${transaction.id})" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-colors">
+                            ✅ အတည်ပြုမည်
+                        </button>
+                        <button onclick="rejectDepositWithdrawal(${transaction.id})" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-colors">
+                            ❌ ပယ်ဖျက်မည်
+                        </button>
+                    </div>
+                </div>
+            `;
+            }).join('');
         }
 
         // Update user management display
@@ -1584,6 +1800,7 @@
         document.getElementById('submitPayment').addEventListener('click', function() {
             const amount = parseInt(document.getElementById('paymentAmount').textContent.replace(/[^\d]/g, ''));
             const transactionId = document.getElementById('transactionId').value.trim();
+            const hasScreenshot = document.getElementById('screenshotInput').files.length > 0;
             
             if (!transactionId) {
                 alert('Transaction ID ထည့်ပါ');
@@ -1595,16 +1812,14 @@
                 return;
             }
 
-            // Add to balance immediately (in real system, this would be pending admin approval)
-            currentUser.balance += amount;
-            const user = users.find(u => u.phone === currentUser.phone);
-            if (user) {
-                user.balance = currentUser.balance;
-            }
-            updateUserDisplay();
-
-            // Add to history
-            addToHistory([], amount, 'အောင်မြင်ပါသည်', null);
+            // Add to transaction history for admin approval (don't add to balance yet)
+            const details = {
+                transactionId: transactionId,
+                screenshot: hasScreenshot,
+                paymentPhone: paymentMethods[selectedPaymentMethod].phone
+            };
+            
+            addTransactionToHistory('deposit', amount, selectedPaymentMethod, details, 'လုပ်ဆောင်နေဆဲ');
 
             // Close modals
             document.getElementById('paymentModal').classList.add('hidden');
@@ -1616,7 +1831,7 @@
             resetPaymentModal();
 
             const methodName = paymentMethods[selectedPaymentMethod].name;
-            alert(`${methodName} ငွေသွင်းမှု အောင်မြင်ပါသည်!\n\nငွေပမာဏ: ${amount.toLocaleString()} ကျပ်\nTransaction ID: ${transactionId}\nလက်ကျန်ငွေ: ${currentUser.balance.toLocaleString()} ကျပ်\n\n✅ ငွေသွင်းမှု ချက်ချင်း အတည်ပြုပြီးပါပြီ!`);
+            alert(`${methodName} ငွေသွင်းတောင်းဆိုမှု ပေးပို့ပြီးပါပြီ!\n\nငွေပမာဏ: ${amount.toLocaleString()} ကျပ်\nTransaction ID: ${transactionId}\n\n⏳ Admin မှ အတည်ပြုပြီးမှ လက်ကျန်ငွေ ထည့်ပေးပါမည်!\n\n📱 History တွင် Status ကြည့်နိုင်ပါသည်`);
         });
 
         // Helper functions
@@ -1816,7 +2031,7 @@
             const methodName = paymentMethods[selectedWithdrawMethod].name;
             if (confirm(`ငွေထုတ်မှု အတည်ပြုပါ\n\nနည်းလမ်း: ${methodName}\nအကောင့်: ${accountNumber}\nအမည်: ${accountName}\nငွေပမာဏ: ${amount.toLocaleString()} ကျပ်\n\nငွေထုတ်မှာ သေချာပါသလား?`)) {
                 
-                // Deduct from balance
+                // Deduct from balance first (will be refunded if rejected)
                 currentUser.balance -= amount;
                 const user = users.find(u => u.phone === currentUser.phone);
                 if (user) {
@@ -1824,12 +2039,20 @@
                 }
                 updateUserDisplay();
 
+                // Add to transaction history for admin approval
+                const details = {
+                    accountNumber: accountNumber,
+                    accountName: accountName
+                };
+                
+                addTransactionToHistory('withdrawal', amount, selectedWithdrawMethod, details, 'လုပ်ဆောင်နေဆဲ');
+
                 // Close modal
                 document.getElementById('withdrawModal').classList.add('hidden');
                 document.getElementById('withdrawModal').classList.remove('flex');
                 resetWithdrawForm();
 
-                alert(`${methodName} ငွေထုတ်တောင်းဆိုမှု အောင်မြင်ပါသည်!\n\nငွေပမာဏ: ${amount.toLocaleString()} ကျပ်\nအကောင့်: ${accountNumber}\nအမည်: ${accountName}\nလက်ကျန်ငွေ: ${currentUser.balance.toLocaleString()} ကျပ်\n\n⏰ ၁-၂ နာရီ အတွင်း ငွေလွှဲပေးပါမည်!`);
+                alert(`${methodName} ငွေထုတ်တောင်းဆိုမှု ပေးပို့ပြီးပါပြီ!\n\nငွေပမာဏ: ${amount.toLocaleString()} ကျပ်\nအကောင့်: ${accountNumber}\nအမည်: ${accountName}\nလက်ကျန်ငွေ: ${currentUser.balance.toLocaleString()} ကျပ်\n\n⏳ Admin မှ အတည်ပြုပြီးမှ ငွေလွှဲပေးပါမည်!\n📱 History တွင် Status ကြည့်နိုင်ပါသည်\n\n⚠️ ငွေပမာဏ ယာယီ နုတ်ထားပါသည်`);
             }
         });
 
@@ -1895,6 +2118,7 @@
                 
                 // Update user management display when admin panel opens
                 updateUserManagementDisplay();
+                updateAdminTransactionDisplay();
             } else {
                 alert('Wrong password!');
             }
@@ -2312,10 +2536,11 @@
         updatePayButton();
         updateHistoryDisplay();
         updateAdminHistoryDisplay();
+        updateAdminTransactionDisplay();
         initializeLotterySystem();
         
         // Show login screen on startup
         showLoginScreen();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f6328917ce893d',t:'MTc1NzkxOTEwNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f66b060458a1b1',t:'MTc1NzkyMTQxOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
