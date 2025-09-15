@@ -3097,91 +3097,166 @@
         }
 
         function initializeData() {
-            loadUsers();
-            loadTransactions();
-            loadHistory();
-            loadLotteryResults();
-            loadNotifications();
+            try {
+                loadUsers();
+                loadTransactions();
+                loadHistory();
+                loadLotteryResults();
+                loadNotifications();
+            } catch (error) {
+                console.log('Data initialization error:', error);
+            }
+        }
+
+        // Cross-device synchronization system
+        function syncDataToServer() {
+            try {
+                // Simulate server sync by using localStorage with timestamp
+                const syncData = {
+                    users: users,
+                    history: history,
+                    transactionHistory: transactionHistory,
+                    todayResults: todayResults,
+                    adminNotifications: adminNotifications,
+                    lastSync: new Date().getTime()
+                };
+                
+                localStorage.setItem('lotterySync', JSON.stringify(syncData));
+            } catch (error) {
+                console.log('Sync error:', error);
+            }
         }
 
         // Real-time user activity tracking
         function startUserActivityTracking() {
-            if (!currentUser || currentUser.type === 'admin') return;
-            
-            // Update user's last activity every 30 seconds
-            setInterval(() => {
-                if (currentUser && currentUser.type !== 'admin') {
-                    const user = users.find(u => u.phone === currentUser.phone);
-                    if (user) {
-                        user.lastActivity = new Date().toLocaleString('my-MM');
-                        saveUsers();
-                    }
-                }
-            }, 30000); // 30 seconds
-            
-            // Track page visibility changes
-            document.addEventListener('visibilitychange', function() {
-                if (currentUser && currentUser.type !== 'admin') {
-                    const user = users.find(u => u.phone === currentUser.phone);
-                    if (user) {
-                        if (document.hidden) {
-                            user.lastSeen = new Date().toLocaleString('my-MM');
-                        } else {
-                            user.lastActivity = new Date().toLocaleString('my-MM');
+            try {
+                if (!currentUser || currentUser.type === 'admin') return;
+                
+                // Update user's last activity every 30 seconds
+                setInterval(() => {
+                    try {
+                        if (currentUser && currentUser.type !== 'admin') {
+                            const user = users.find(u => u.phone === currentUser.phone);
+                            if (user) {
+                                user.lastActivity = new Date().toLocaleString('my-MM');
+                                saveUsers();
+                            }
                         }
-                        saveUsers();
+                    } catch (error) {
+                        console.log('Activity tracking error:', error);
                     }
-                }
-            });
+                }, 30000); // 30 seconds
+                
+                // Track page visibility changes
+                document.addEventListener('visibilitychange', function() {
+                    try {
+                        if (currentUser && currentUser.type !== 'admin') {
+                            const user = users.find(u => u.phone === currentUser.phone);
+                            if (user) {
+                                if (document.hidden) {
+                                    user.lastSeen = new Date().toLocaleString('my-MM');
+                                } else {
+                                    user.lastActivity = new Date().toLocaleString('my-MM');
+                                }
+                                saveUsers();
+                            }
+                        }
+                    } catch (error) {
+                        console.log('Visibility change error:', error);
+                    }
+                });
+            } catch (error) {
+                console.log('User activity tracking initialization error:', error);
+            }
         }
 
         // Initialize app
         function initializeApp() {
-            initializeData(); // Load all data from localStorage first
-            
-            // Start cross-device synchronization
-            startCrossDeviceSync();
-            
-            // Try to auto-login from saved session
-            if (loadCurrentUser()) {
-                // User was previously logged in and session is still valid
-                showMainApp();
-                updateUserDisplay();
-                updateBetDisplay();
-                updateTotal();
-                updatePayButton();
-                updateHistoryDisplay();
-                updateAdminHistoryDisplay();
-                updateAdminTransactionDisplay();
-                updateAdminNotificationBadge();
-                updateAdminNotificationPanel();
+            try {
+                // Initialize data first
+                initializeData();
+                
+                // Initialize lottery system
                 initializeLotterySystem();
-                startUserActivityTracking();
-            } else {
-                // No valid session, show login screen
-                showLoginScreen();
-                updateBetDisplay();
-                updateTotal();
-                updatePayButton();
-                updateHistoryDisplay();
-                updateAdminHistoryDisplay();
-                updateAdminTransactionDisplay();
-                updateAdminNotificationBadge();
-                updateAdminNotificationPanel();
-                initializeLotterySystem();
-            }
-            
-            // Auto-refresh admin panels every 10 seconds for real-time updates
-            setInterval(() => {
-                if (currentUser && currentUser.type === 'admin') {
-                    updateUserManagementDisplay();
-                    updateAdminNotificationBadge();
+                
+                // Try to auto-login from saved session
+                if (loadCurrentUser()) {
+                    // User was previously logged in and session is still valid
+                    showMainApp();
+                    updateUserDisplay();
+                } else {
+                    // No valid session, show login screen
+                    showLoginScreen();
                 }
-            }, 10000); // 10 seconds
+                
+                // Initialize all displays
+                updateBetDisplay();
+                updateTotal();
+                updatePayButton();
+                updateHistoryDisplay();
+                updateAdminHistoryDisplay();
+                updateAdminTransactionDisplay();
+                updateAdminNotificationBadge();
+                updateAdminNotificationPanel();
+                
+                // Start user activity tracking if logged in
+                if (currentUser) {
+                    startUserActivityTracking();
+                }
+                
+                // Auto-refresh admin panels every 10 seconds for real-time updates
+                setInterval(() => {
+                    try {
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateUserManagementDisplay();
+                            updateAdminNotificationBadge();
+                        }
+                    } catch (error) {
+                        console.log('Admin refresh error:', error);
+                    }
+                }, 10000); // 10 seconds
+                
+            } catch (error) {
+                console.log('Initialization error:', error);
+                // Fallback to login screen
+                showLoginScreen();
+                try {
+                    initializeLotterySystem();
+                } catch (lotteryError) {
+                    console.log('Lottery system error:', lotteryError);
+                }
+            }
         }
 
-        // Initialize
-        initializeApp();
+        // Simple initialization
+        function safeInitialize() {
+            try {
+                // Load data first
+                loadUsers();
+                loadLotteryResults();
+                
+                // Initialize lottery display
+                updateCurrentDate();
+                updateLotteryResults();
+                updateNextDrawTime();
+                
+                // Show login screen by default
+                showLoginScreen();
+                
+                console.log('App initialized successfully');
+            } catch (error) {
+                console.log('Safe initialization error:', error);
+                // Even if there's an error, show login screen
+                showLoginScreen();
+            }
+        }
+
+        // Initialize when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', safeInitialize);
+        } else {
+            safeInitialize();
+        }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f93295224a8963',t:'MTc1Nzk1MDU2NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f95480c59b8963',t:'MTc1Nzk1MTk1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
