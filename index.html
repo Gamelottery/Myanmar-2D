@@ -746,6 +746,7 @@
             const user = findUser(phone, password);
             if (user) {
                 currentUser = user;
+                saveCurrentUser(); // Save login state
                 showMainApp();
                 updateUserDisplay();
                 return { success: true, message: 'အကောင့်ဝင်ရောက်ခြင်း အောင်မြင်ပါသည်!' };
@@ -756,6 +757,7 @@
 
         function logout() {
             currentUser = null;
+            clearCurrentUser(); // Clear login state
             showLoginScreen();
             // Reset game state
             betList = [];
@@ -763,6 +765,41 @@
             updateBetDisplay();
             updateTotal();
             updatePayButton();
+        }
+
+        // Save current user to localStorage
+        function saveCurrentUser() {
+            if (currentUser) {
+                localStorage.setItem('lotteryCurrentUser', JSON.stringify({
+                    phone: currentUser.phone,
+                    loginTime: new Date().getTime()
+                }));
+            }
+        }
+
+        // Load current user from localStorage
+        function loadCurrentUser() {
+            const savedUser = localStorage.getItem('lotteryCurrentUser');
+            if (savedUser) {
+                const userData = JSON.parse(savedUser);
+                const loginTime = userData.loginTime;
+                const now = new Date().getTime();
+                
+                // Check if login is still valid (24 hours)
+                if (now - loginTime < 24 * 60 * 60 * 1000) {
+                    const user = users.find(u => u.phone === userData.phone);
+                    if (user) {
+                        currentUser = user;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Clear current user from localStorage
+        function clearCurrentUser() {
+            localStorage.removeItem('lotteryCurrentUser');
         }
 
         function showLoginScreen() {
@@ -2601,18 +2638,37 @@
             loadLotteryResults();
         }
 
+        // Initialize app
+        function initializeApp() {
+            initializeData(); // Load all data from localStorage first
+            
+            // Try to auto-login from saved session
+            if (loadCurrentUser()) {
+                // User was previously logged in and session is still valid
+                showMainApp();
+                updateUserDisplay();
+                updateBetDisplay();
+                updateTotal();
+                updatePayButton();
+                updateHistoryDisplay();
+                updateAdminHistoryDisplay();
+                updateAdminTransactionDisplay();
+                initializeLotterySystem();
+            } else {
+                // No valid session, show login screen
+                showLoginScreen();
+                updateBetDisplay();
+                updateTotal();
+                updatePayButton();
+                updateHistoryDisplay();
+                updateAdminHistoryDisplay();
+                updateAdminTransactionDisplay();
+                initializeLotterySystem();
+            }
+        }
+
         // Initialize
-        initializeData(); // Load all data from localStorage first
-        updateBetDisplay();
-        updateTotal();
-        updatePayButton();
-        updateHistoryDisplay();
-        updateAdminHistoryDisplay();
-        updateAdminTransactionDisplay();
-        initializeLotterySystem();
-        
-        // Show login screen on startup
-        showLoginScreen();
+        initializeApp();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8c5fb209d8955',t:'MTc1Nzk0NjExNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8d738f7c5895b',t:'MTc1Nzk0NjgyMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
