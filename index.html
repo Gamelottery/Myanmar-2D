@@ -1652,6 +1652,9 @@
             // Set the result
             todayResults[time] = formattedNumber;
             
+            // Save to localStorage for real-time sync across all tabs/windows
+            saveLotteryResults();
+            
             // Update display for all users (real-time update)
             updateLotteryResults();
             checkWinningNumbers();
@@ -1662,7 +1665,7 @@
             // Show success message
             const timeDisplay = time === '09:30' ? 'မနက် 9:30' : 
                                time === '14:00' ? 'နေ့လည် 2:00' : 'ညနေ 4:30';
-            alert(`${timeDisplay} ထီရလဒ် ${formattedNumber} သတ်မှတ်ပြီးပါပြီ!\n\nအားလုံးသော User များ ထီရလဒ် မြင်ရပါပြီ!`);
+            alert(`${timeDisplay} ထီရလဒ် ${formattedNumber} သတ်မှတ်ပြီးပါပြီ!\n\n🌐 အားလုံးသော Website များတွင် User များ ချက်ချင်း မြင်ရပါပြီ!\n\n📱 အခြား Tab များ၊ Browser များ၊ Device များတွင်ပါ အလိုအလျောက် အပ်ဒိတ် ဖြစ်ပါမည်!`);
             
             // Broadcast result to all users (simulate real-time update)
             broadcastLotteryResult(time, formattedNumber);
@@ -1720,6 +1723,9 @@
                     '16:30': null
                 };
                 
+                // Save to localStorage for real-time sync across all tabs/windows
+                saveLotteryResults();
+                
                 // Update display for all users
                 updateLotteryResults();
                 
@@ -1731,7 +1737,7 @@
                 // Reset winning badges
                 document.querySelectorAll('.winning-badge').forEach(badge => badge.remove());
                 
-                alert('ထီရလဒ် အားလုံး ရှင်းလင်းပြီးပါပြီ!\n\nအားလုံးသော User များ အပ်ဒိတ် မြင်ရပါပြီ!');
+                alert('ထီရလဒ် အားလုံး ရှင်းလင်းပြီးပါပြီ!\n\n🌐 အားလုံးသော Website များတွင် User များ ချက်ချင်း အပ်ဒိတ် မြင်ရပါပြီ!\n\n📱 အခြား Tab များ၊ Browser များ၊ Device များတွင်ပါ အလိုအလျောက် ရှင်းလင်းပါမည်!');
                 
                 // Notify all users
                 if (currentUser && currentUser.type !== 'admin') {
@@ -1746,13 +1752,69 @@
             // Admin must manually set results using the admin panel
         }
 
+        // Real-time lottery results system using localStorage
+        function saveLotteryResults() {
+            localStorage.setItem('lotteryResults', JSON.stringify(todayResults));
+            localStorage.setItem('lotteryResultsDate', new Date().toDateString());
+        }
+
+        function loadLotteryResults() {
+            const savedDate = localStorage.getItem('lotteryResultsDate');
+            const today = new Date().toDateString();
+            
+            if (savedDate === today) {
+                const savedResults = localStorage.getItem('lotteryResults');
+                if (savedResults) {
+                    todayResults = JSON.parse(savedResults);
+                }
+            } else {
+                // New day, reset results
+                todayResults = {
+                    '09:30': null,
+                    '14:00': null,
+                    '16:30': null
+                };
+                saveLotteryResults();
+            }
+        }
+
+        // Listen for lottery result changes from other tabs/windows
+        function setupRealTimeUpdates() {
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'lotteryResults') {
+                    // Another tab/window updated lottery results
+                    loadLotteryResults();
+                    updateLotteryResults();
+                    checkWinningNumbers();
+                    
+                    // Show notification to user
+                    if (currentUser && currentUser.type !== 'admin') {
+                        showLotteryNotification('🎰 ထီရလဒ် အပ်ဒိတ် ရရှိပါပြီ!', 'success');
+                    }
+                }
+            });
+            
+            // Also check for updates every 2 seconds for same-tab updates
+            setInterval(() => {
+                const currentResults = JSON.stringify(todayResults);
+                loadLotteryResults();
+                const newResults = JSON.stringify(todayResults);
+                
+                if (currentResults !== newResults) {
+                    updateLotteryResults();
+                    checkWinningNumbers();
+                }
+            }, 2000);
+        }
+
         // Initialize lottery system
         function initializeLotterySystem() {
             updateCurrentDate();
-            simulateDrawResults(); // For demo
+            loadLotteryResults(); // Load existing results
             updateLotteryResults();
             updateNextDrawTime();
             checkWinningNumbers();
+            setupRealTimeUpdates(); // Setup real-time updates
             
             // Update every minute
             setInterval(() => {
@@ -1774,5 +1836,5 @@
         // Show login screen on startup
         showLoginScreen();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f5916d850b895a',t:'MTc1NzkxMjUwNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f5f4d18326a1c2',t:'MTc1NzkxNjU3Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
