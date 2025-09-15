@@ -644,6 +644,34 @@
                         </div>
                     </div>
                     
+                    <!-- Admin Debug Panel -->
+                    <div class="bg-red-50 rounded-lg p-4 mb-6">
+                        <h4 class="text-lg font-bold text-gray-800 mb-4">🔧 Admin Debug Panel</h4>
+                        
+                        <div class="grid grid-cols-2 gap-2 mb-4">
+                            <button onclick="debugShowData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded text-sm transition-colors">
+                                📊 Show All Data
+                            </button>
+                            <button onclick="debugClearAllData()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-3 rounded text-sm transition-colors">
+                                🗑️ Clear All Data
+                            </button>
+                            <button onclick="debugReloadPage()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 rounded text-sm transition-colors">
+                                🔄 Reload Page
+                            </button>
+                            <button onclick="debugTestTransaction()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-3 rounded text-sm transition-colors">
+                                💰 Test Transaction
+                            </button>
+                        </div>
+                        
+                        <div class="text-xs text-gray-600 bg-white rounded p-2">
+                            <div><strong>Current User:</strong> <span id="debugCurrentUser">None</span></div>
+                            <div><strong>Total Users:</strong> <span id="debugTotalUsers">0</span></div>
+                            <div><strong>Total Transactions:</strong> <span id="debugTotalTransactions">0</span></div>
+                            <div><strong>Total History:</strong> <span id="debugTotalHistory">0</span></div>
+                            <div><strong>Lottery Results:</strong> <span id="debugLotteryResults">None</span></div>
+                        </div>
+                    </div>
+
                     <!-- User Management -->
                     <div class="bg-green-50 rounded-lg p-4 mb-6">
                         <h4 class="text-lg font-bold text-gray-800 mb-4">👥 အကောင့်များ စီမံခန့်ခွဲမှု</h4>
@@ -1253,8 +1281,13 @@
 
         // Approve deposit/withdrawal transaction
         function approveDepositWithdrawal(id) {
-            const transaction = transactionHistory.find(t => t.id === id);
-            if (transaction) {
+            try {
+                const transaction = transactionHistory.find(t => t.id === id);
+                if (!transaction) {
+                    alert('Transaction not found!');
+                    return;
+                }
+                
                 transaction.status = 'အောင်မြင်ပါသည်';
                 
                 if (transaction.type === 'deposit') {
@@ -1263,33 +1296,65 @@
                         const user = users.find(u => u.phone === transaction.user.phone);
                         if (user) {
                             user.balance += transaction.amount;
+                            
                             // Update display if it's the current user
                             if (currentUser && currentUser.phone === user.phone) {
                                 currentUser.balance = user.balance;
                                 updateUserDisplay();
                             }
+                            
+                            console.log(`Added ${transaction.amount} to ${user.name}'s balance. New balance: ${user.balance}`);
                         }
                     }
                 } else if (transaction.type === 'withdrawal') {
                     // Money already deducted, just approve
-                    // In real system, this would trigger actual money transfer
+                    console.log(`Withdrawal approved for ${transaction.user?.name}: ${transaction.amount}`);
                 }
                 
-                saveUsers(); // Save to localStorage
-                saveTransactions(); // Save to localStorage
+                // Save changes immediately
+                try {
+                    saveUsers();
+                    saveTransactions();
+                } catch (e) {
+                    console.log('Save error:', e);
+                }
+                
+                // Update displays
                 updateTransactionHistoryDisplay();
                 updateAdminTransactionDisplay();
+                updateUserManagementDisplay();
                 
                 const typeText = transaction.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
-                alert(`${typeText} အတည်ပြုပြီးပါပြီ!\n\nအကောင့်ပိုင်ရှင်: ${transaction.user ? transaction.user.name : 'Unknown User'}\nငွေပမာဏ: ${transaction.amount.toLocaleString()} ကျပ်`);
+                const methodIcon = transaction.method === 'wavepay' ? '🌊' : '💜';
+                const methodName = transaction.method === 'wavepay' ? 'Wave Pay' : 'K Pay';
+                
+                alert(`✅ ${typeText} အတည်ပြုပြီးပါပြီ!\n\n` +
+                      `👤 အကောင့်ပိုင်ရှင်: ${transaction.user ? transaction.user.name : 'Unknown User'}\n` +
+                      `📱 ဖုန်း: ${transaction.user ? transaction.user.phone : 'Unknown'}\n` +
+                      `${methodIcon} နည်းလမ်း: ${methodName}\n` +
+                      `💰 ငွေပမာဏ: ${transaction.amount.toLocaleString()} ကျပ်\n` +
+                      `${transaction.details.transactionId ? `🔢 Transaction ID: ${transaction.details.transactionId}\n` : ''}` +
+                      `${transaction.type === 'deposit' ? '✅ လက်ကျန်ငွေထဲ ထည့်ပေးပြီးပါပြီ!' : '✅ ငွေလွှဲပေးရန် စီစဉ်ပါ!'}`);
+                
+            } catch (error) {
+                console.log('Approve transaction error:', error);
+                alert('Error approving transaction. Please try again.');
             }
         }
 
         // Reject deposit/withdrawal transaction
         function rejectDepositWithdrawal(id) {
-            const transaction = transactionHistory.find(t => t.id === id);
-            if (transaction) {
+            try {
+                const transaction = transactionHistory.find(t => t.id === id);
+                if (!transaction) {
+                    alert('Transaction not found!');
+                    return;
+                }
+                
+                const reason = prompt('ပယ်ဖျက်ရခြင်း အကြောင်းရင်း ရေးပါ (Optional):', '');
+                
                 transaction.status = 'ပယ်ဖျက်ပြီး';
+                transaction.rejectReason = reason || 'No reason provided';
                 
                 if (transaction.type === 'withdrawal') {
                     // Refund balance to user for rejected withdrawal
@@ -1297,24 +1362,48 @@
                         const user = users.find(u => u.phone === transaction.user.phone);
                         if (user) {
                             user.balance += transaction.amount;
+                            
                             // Update display if it's the current user
                             if (currentUser && currentUser.phone === user.phone) {
                                 currentUser.balance = user.balance;
                                 updateUserDisplay();
                             }
+                            
+                            console.log(`Refunded ${transaction.amount} to ${user.name}'s balance. New balance: ${user.balance}`);
                         }
                     }
                 }
                 // For deposits, no refund needed as money wasn't added yet
                 
-                saveUsers(); // Save to localStorage
-                saveTransactions(); // Save to localStorage
+                // Save changes immediately
+                try {
+                    saveUsers();
+                    saveTransactions();
+                } catch (e) {
+                    console.log('Save error:', e);
+                }
+                
+                // Update displays
                 updateTransactionHistoryDisplay();
                 updateAdminTransactionDisplay();
+                updateUserManagementDisplay();
                 
                 const typeText = transaction.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
-                const refundText = transaction.type === 'withdrawal' ? `\nငွေပြန်အမ်း: ${transaction.amount.toLocaleString()} ကျပ်` : '';
-                alert(`${typeText} ပယ်ဖျက်ပြီးပါပြီ!\n\nအကောင့်ပိုင်ရှင်: ${transaction.user ? transaction.user.name : 'Unknown User'}${refundText}`);
+                const methodIcon = transaction.method === 'wavepay' ? '🌊' : '💜';
+                const methodName = transaction.method === 'wavepay' ? 'Wave Pay' : 'K Pay';
+                const refundText = transaction.type === 'withdrawal' ? `\n💰 ငွေပြန်အမ်း: ${transaction.amount.toLocaleString()} ကျပ်` : '';
+                
+                alert(`❌ ${typeText} ပယ်ဖျက်ပြီးပါပြီ!\n\n` +
+                      `👤 အကောင့်ပိုင်ရှင်: ${transaction.user ? transaction.user.name : 'Unknown User'}\n` +
+                      `📱 ဖုန်း: ${transaction.user ? transaction.user.phone : 'Unknown'}\n` +
+                      `${methodIcon} နည်းလမ်း: ${methodName}\n` +
+                      `💰 ငွေပမာဏ: ${transaction.amount.toLocaleString()} ကျပ်\n` +
+                      `${reason ? `📝 အကြောင်းရင်း: ${reason}\n` : ''}` +
+                      `${refundText}`);
+                
+            } catch (error) {
+                console.log('Reject transaction error:', error);
+                alert('Error rejecting transaction. Please try again.');
             }
         }
 
@@ -2378,11 +2467,17 @@
                 document.getElementById('adminHistoryModal').classList.add('flex');
                 document.getElementById('adminPassword').value = '';
                 
-                // Update user management display when admin panel opens
-                updateUserManagementDisplay();
-                updateAdminTransactionDisplay();
-                updateAdminNotificationBadge();
-                updateAdminNotificationPanel();
+                // Update all admin displays when admin panel opens
+                try {
+                    updateUserManagementDisplay();
+                    updateAdminTransactionDisplay();
+                    updateAdminHistoryDisplay();
+                    updateAdminNotificationBadge();
+                    updateAdminNotificationPanel();
+                    updateDebugInfo();
+                } catch (error) {
+                    console.log('Admin panel update error:', error);
+                }
             } else {
                 alert('Wrong password!');
             }
@@ -2633,37 +2728,62 @@
 
         // Admin lottery control functions
         function setLotteryResult(time, inputId) {
-            const input = document.getElementById(inputId);
-            const number = input.value.trim();
-            
-            // Validation
-            if (!number || number.length !== 2 || isNaN(parseInt(number))) {
-                alert('နံပါတ် ၂ လုံး ရိုက်ထည့်ပါ (00-99)');
-                return;
+            try {
+                const input = document.getElementById(inputId);
+                if (!input) {
+                    alert('Input field not found!');
+                    return;
+                }
+                
+                const number = input.value.trim();
+                
+                // Validation
+                if (!number || number.length !== 2 || isNaN(parseInt(number))) {
+                    alert('နံပါတ် ၂ လုံး ရိုက်ထည့်ပါ (00-99)');
+                    input.focus();
+                    return;
+                }
+                
+                const numValue = parseInt(number);
+                if (numValue < 0 || numValue > 99) {
+                    alert('နံပါတ် 00 မှ 99 အတွင်း ရိုက်ထည့်ပါ');
+                    input.focus();
+                    return;
+                }
+                
+                const formattedNumber = String(numValue).padStart(2, '0');
+                
+                // Set the result
+                todayResults[time] = formattedNumber;
+                
+                // Save to localStorage immediately
+                try {
+                    localStorage.setItem('lotteryResults', JSON.stringify(todayResults));
+                    localStorage.setItem('lotteryResultsDate', new Date().toDateString());
+                } catch (e) {
+                    console.log('Save error:', e);
+                }
+                
+                // Update display immediately
+                updateLotteryResults();
+                checkWinningNumbers();
+                
+                // Clear input
+                input.value = '';
+                
+                // Show success message
+                const timeDisplay = time === '09:30' ? 'မနက် 9:30' : 
+                                   time === '14:00' ? 'နေ့လည် 2:00' : 'ညနေ 4:30';
+                
+                alert(`✅ အောင်မြင်ပါပြီ!\n\n${timeDisplay} ထီရလဒ်: ${formattedNumber}\n\n🎰 User များ ချက်ချင်း မြင်ရပါပြီ!\n💰 အနိုင်ရသူများ အလိုအလျောက် ငွေရရှိပါမည်!`);
+                
+                // Process winnings immediately
+                processWinnings(time, formattedNumber);
+                
+            } catch (error) {
+                console.log('Set lottery result error:', error);
+                alert('Error setting result. Please try again.');
             }
-            
-            const formattedNumber = String(parseInt(number)).padStart(2, '0');
-            
-            // Set the result
-            todayResults[time] = formattedNumber;
-            
-            // Save to localStorage for real-time sync across all tabs/windows
-            saveLotteryResults();
-            
-            // Update display for all users (real-time update)
-            updateLotteryResults();
-            checkWinningNumbers();
-            
-            // Clear input
-            input.value = '';
-            
-            // Show success message
-            const timeDisplay = time === '09:30' ? 'မနက် 9:30' : 
-                               time === '14:00' ? 'နေ့လည် 2:00' : 'ညနေ 4:30';
-            alert(`${timeDisplay} ထီရလဒ် ${formattedNumber} သတ်မှတ်ပြီးပါပြီ!\n\n🌐 အားလုံးသော Website များတွင် User များ ချက်ချင်း မြင်ရပါပြီ!\n\n📱 အခြား Tab များ၊ Browser များ၊ Device များတွင်ပါ အလိုအလျောက် အပ်ဒိတ် ဖြစ်ပါမည်!`);
-            
-            // Broadcast result to all users (simulate real-time update)
-            broadcastLotteryResult(time, formattedNumber);
         }
         
         // Broadcast lottery result to all users (simulate real-time update)
@@ -2710,33 +2830,117 @@
             }, 5000);
         }
         
+        // Process winnings when lottery result is set
+        function processWinnings(drawTime, winningNumber) {
+            try {
+                let totalWinners = 0;
+                let totalWinAmount = 0;
+                
+                // Process all approved bets
+                history.forEach(historyItem => {
+                    if (historyItem.status === 'အောင်မြင်ပါသည်') {
+                        historyItem.bets.forEach(bet => {
+                            if (bet.number === winningNumber && !bet.processed) {
+                                // Mark as winner
+                                bet.isWinner = true;
+                                bet.winningDraw = drawTime;
+                                bet.winAmount = bet.amount * 80; // 80x multiplier
+                                bet.processed = true; // Prevent double processing
+                                
+                                // Add winnings to user balance
+                                if (historyItem.user) {
+                                    const user = users.find(u => u.phone === historyItem.user.phone);
+                                    if (user) {
+                                        user.balance += bet.winAmount;
+                                        totalWinners++;
+                                        totalWinAmount += bet.winAmount;
+                                        
+                                        // Update current user display if needed
+                                        if (currentUser && currentUser.phone === user.phone) {
+                                            currentUser.balance = user.balance;
+                                            updateUserDisplay();
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                // Save all changes
+                saveUsers();
+                saveHistory();
+                
+                // Update displays
+                updateHistoryDisplay();
+                updateUserManagementDisplay();
+                
+                // Show summary
+                if (totalWinners > 0) {
+                    alert(`🎉 အနိုင်ရမှု အချက်အလက်များ:\n\n` +
+                          `🏆 အနိုင်ရသူ: ${totalWinners} ယောက်\n` +
+                          `💰 စုစုပေါင်း ပေးငွေ: ${totalWinAmount.toLocaleString()} ကျပ်\n` +
+                          `🎯 အနိုင်ရနံပါတ်: ${winningNumber}\n\n` +
+                          `✅ အားလုံး အလိုအလျောက် လက်ကျန်ငွေထဲ ထည့်ပေးပြီးပါပြီ!`);
+                } else {
+                    alert(`📊 ရလဒ်: ${winningNumber}\n\n🎯 ဤနံပါတ် ထိုးထားသူ မရှိပါ\n💰 ပေးငွေ: 0 ကျပ်`);
+                }
+                
+            } catch (error) {
+                console.log('Process winnings error:', error);
+                alert('Error processing winnings. Please check manually.');
+            }
+        }
+
         function clearAllResults() {
-            if (confirm('ထီရလဒ် အားလုံး ရှင်းလင်းမှာ သေချာပါသလား?')) {
-                todayResults = {
-                    '09:30': null,
-                    '14:00': null,
-                    '16:30': null
-                };
-                
-                // Save to localStorage for real-time sync across all tabs/windows
-                saveLotteryResults();
-                
-                // Update display for all users
-                updateLotteryResults();
-                
-                // Clear admin inputs
-                document.getElementById('admin930').value = '';
-                document.getElementById('admin200').value = '';
-                document.getElementById('admin430').value = '';
-                
-                // Reset winning badges
-                document.querySelectorAll('.winning-badge').forEach(badge => badge.remove());
-                
-                alert('ထီရလဒ် အားလုံး ရှင်းလင်းပြီးပါပြီ!\n\n🌐 အားလုံးသော Website များတွင် User များ ချက်ချင်း အပ်ဒိတ် မြင်ရပါပြီ!\n\n📱 အခြား Tab များ၊ Browser များ၊ Device များတွင်ပါ အလိုအလျောက် ရှင်းလင်းပါမည်!');
-                
-                // Notify all users
-                if (currentUser && currentUser.type !== 'admin') {
-                    showLotteryNotification('🔄 ထီရလဒ်များ ရှင်းလင်းပြီးပါပြီ', 'warning');
+            if (confirm('ထီရလဒ် အားလုံး ရှင်းလင်းမှာ သေချာပါသလား?\n\n⚠️ ဤလုပ်ဆောင်ချက်ကို ပြန်ပြင်၍ မရပါ!')) {
+                try {
+                    todayResults = {
+                        '09:30': null,
+                        '14:00': null,
+                        '16:30': null
+                    };
+                    
+                    // Reset all bet processing flags
+                    history.forEach(historyItem => {
+                        historyItem.bets.forEach(bet => {
+                            bet.isWinner = false;
+                            bet.winningDraw = null;
+                            bet.winAmount = 0;
+                            bet.processed = false;
+                        });
+                    });
+                    
+                    // Save to localStorage immediately
+                    try {
+                        localStorage.setItem('lotteryResults', JSON.stringify(todayResults));
+                        localStorage.setItem('lotteryResultsDate', new Date().toDateString());
+                        saveHistory();
+                    } catch (e) {
+                        console.log('Save error:', e);
+                    }
+                    
+                    // Update display
+                    updateLotteryResults();
+                    updateHistoryDisplay();
+                    
+                    // Clear admin inputs
+                    try {
+                        document.getElementById('admin930').value = '';
+                        document.getElementById('admin200').value = '';
+                        document.getElementById('admin430').value = '';
+                    } catch (e) {
+                        console.log('Clear inputs error:', e);
+                    }
+                    
+                    // Reset winning badges
+                    document.querySelectorAll('.winning-badge').forEach(badge => badge.remove());
+                    
+                    alert('✅ ထီရလဒ် အားလုံး ရှင်းလင်းပြီးပါပြီ!\n\n🔄 အားလုံး ပြန်လည် သတ်မှတ်နိုင်ပါပြီ!');
+                    
+                } catch (error) {
+                    console.log('Clear results error:', error);
+                    alert('Error clearing results. Please refresh and try again.');
                 }
             }
         }
@@ -3251,6 +3455,113 @@
             }
         }
 
+        // Debug functions for admin
+        function debugShowData() {
+            let data = '🔧 ADMIN DEBUG DATA:\n\n';
+            
+            data += `👤 CURRENT USER:\n`;
+            data += currentUser ? `${currentUser.name} (${currentUser.phone}) - ${currentUser.type}\nBalance: ${currentUser.balance.toLocaleString()} ကျပ်\n\n` : 'None\n\n';
+            
+            data += `👥 ALL USERS (${users.length}):\n`;
+            users.forEach(user => {
+                data += `${user.name} (${user.phone}) - ${user.type} - ${user.balance.toLocaleString()} ကျပ်\n`;
+            });
+            data += '\n';
+            
+            data += `💰 TRANSACTIONS (${transactionHistory.length}):\n`;
+            transactionHistory.slice(0, 5).forEach(t => {
+                data += `${t.type} - ${t.amount.toLocaleString()} - ${t.status} - ${t.user?.name}\n`;
+            });
+            data += '\n';
+            
+            data += `🎰 LOTTERY HISTORY (${history.length}):\n`;
+            history.slice(0, 5).forEach(h => {
+                data += `${h.amount.toLocaleString()} ကျပ် - ${h.status} - ${h.user?.name}\n`;
+            });
+            data += '\n';
+            
+            data += `🎯 LOTTERY RESULTS:\n`;
+            Object.entries(todayResults).forEach(([time, result]) => {
+                data += `${time}: ${result || 'မထွက်သေး'}\n`;
+            });
+            
+            alert(data);
+        }
+
+        function debugClearAllData() {
+            if (confirm('⚠️ အားလုံး ရှင်းလင်းမှာ သေချာပါသလား?\n\nဤလုပ်ဆောင်ချက်ကို ပြန်ပြင်၍ မရပါ!')) {
+                try {
+                    // Clear all localStorage
+                    localStorage.removeItem('lotteryUsers');
+                    localStorage.removeItem('lotteryTransactions');
+                    localStorage.removeItem('lotteryHistory');
+                    localStorage.removeItem('lotteryResults');
+                    localStorage.removeItem('lotteryResultsDate');
+                    localStorage.removeItem('lotteryCurrentUser');
+                    localStorage.removeItem('adminNotifications');
+                    localStorage.removeItem('lotterySync');
+                    
+                    alert('✅ အားလုံး ရှင်းလင်းပြီးပါပြီ!\n\nPage ကို Reload လုပ်ပါ!');
+                    
+                } catch (error) {
+                    alert('Error clearing data: ' + error.message);
+                }
+            }
+        }
+
+        function debugReloadPage() {
+            if (confirm('Page ကို Reload လုပ်မှာ သေချာပါသလား?')) {
+                window.location.reload();
+            }
+        }
+
+        function debugTestTransaction() {
+            if (!currentUser) {
+                alert('Admin အကောင့်ဝင်ရောက်ပါ!');
+                return;
+            }
+            
+            // Create a test deposit transaction
+            const testTransaction = {
+                id: Date.now(),
+                type: 'deposit',
+                date: new Date().toLocaleString('my-MM'),
+                amount: 10000,
+                method: 'wavepay',
+                status: 'လုပ်ဆောင်နေဆဲ',
+                details: {
+                    transactionId: 'TEST' + Date.now(),
+                    screenshot: false
+                },
+                user: {
+                    name: 'Test User',
+                    phone: '09111111111',
+                    type: 'user'
+                }
+            };
+            
+            transactionHistory.unshift(testTransaction);
+            saveTransactions();
+            updateAdminTransactionDisplay();
+            
+            alert('✅ Test Transaction ထည့်ပြီးပါပြီ!\n\nငွေသွင်း/ထုတ် အတည်ပြုရန် section တွင် ကြည့်ပါ!');
+        }
+
+        function updateDebugInfo() {
+            try {
+                document.getElementById('debugCurrentUser').textContent = currentUser ? `${currentUser.name} (${currentUser.type})` : 'None';
+                document.getElementById('debugTotalUsers').textContent = users.length;
+                document.getElementById('debugTotalTransactions').textContent = transactionHistory.length;
+                document.getElementById('debugTotalHistory').textContent = history.length;
+                
+                const results = Object.entries(todayResults).filter(([time, result]) => result !== null);
+                document.getElementById('debugLotteryResults').textContent = results.length > 0 ? 
+                    results.map(([time, result]) => `${time}:${result}`).join(', ') : 'None';
+            } catch (error) {
+                console.log('Debug info update error:', error);
+            }
+        }
+
         // Initialize when page loads
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', safeInitialize);
@@ -3258,5 +3569,5 @@
             safeInitialize();
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f95480c59b8963',t:'MTc1Nzk1MTk1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f96fe5160e8943',t:'MTc1Nzk1MzA3Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
