@@ -1576,6 +1576,10 @@
                                 ${user.loginBrowser ? `<div>🌐 Browser: ${user.loginBrowser}</div>` : ''}
                                 ${user.loginDevice ? `<div>📱 Device: ${user.loginDevice}</div>` : ''}
                                 ${user.loginCount ? `<div>🔢 Login အကြိမ်: ${user.loginCount}</div>` : ''}
+                                ${user.lastActivity ? `<div>⚡ နောက်ဆုံး Active: ${user.lastActivity}</div>` : ''}
+                                <div class="text-xs ${isOnline ? 'text-green-600' : 'text-gray-400'}">
+                                    🌐 Cross-Device Sync: ${isOnline ? 'Connected' : 'Offline'}
+                                </div>
                             </div>
                         </div>
                         <div class="text-right">
@@ -3045,6 +3049,7 @@
 
         function saveNotifications() {
             localStorage.setItem('adminNotifications', JSON.stringify(adminNotifications));
+            syncDataToServer(); // Sync to all devices
         }
 
         function loadNotifications() {
@@ -3057,6 +3062,7 @@
         // Data persistence functions
         function saveUsers() {
             localStorage.setItem('lotteryUsers', JSON.stringify(users));
+            syncDataToServer(); // Sync to all devices
         }
 
         function loadUsers() {
@@ -3068,6 +3074,7 @@
 
         function saveTransactions() {
             localStorage.setItem('lotteryTransactions', JSON.stringify(transactionHistory));
+            syncDataToServer(); // Sync to all devices
         }
 
         function loadTransactions() {
@@ -3079,6 +3086,7 @@
 
         function saveHistory() {
             localStorage.setItem('lotteryHistory', JSON.stringify(history));
+            syncDataToServer(); // Sync to all devices
         }
 
         function loadHistory() {
@@ -3131,6 +3139,9 @@
         function initializeApp() {
             initializeData(); // Load all data from localStorage first
             
+            // Start cross-device synchronization
+            startCrossDeviceSync();
+            
             // Try to auto-login from saved session
             if (loadCurrentUser()) {
                 // User was previously logged in and session is still valid
@@ -3172,5 +3183,5 @@
         // Initialize
         initializeApp();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f908865171a1bd',t:'MTc1Nzk0ODg0Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f93295224a8963',t:'MTc1Nzk1MDU2NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
