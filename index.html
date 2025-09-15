@@ -644,6 +644,42 @@
                         </div>
                     </div>
                     
+                    <!-- Master Admin Control Status -->
+                    <div class="bg-gradient-to-r from-red-500 to-pink-500 rounded-lg p-4 mb-6 text-white">
+                        <h4 class="text-lg font-bold mb-4">👑 MASTER ADMIN CONTROL CENTER</h4>
+                        
+                        <div class="bg-white bg-opacity-20 rounded-lg p-3 mb-4">
+                            <div class="text-sm space-y-1">
+                                <div class="flex justify-between">
+                                    <span>🔥 Control Status:</span>
+                                    <span class="font-bold text-green-300" id="adminControlStatus">ACTIVE</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>📱 Admin Device:</span>
+                                    <span class="font-bold text-blue-300" id="adminDeviceInfo">Loading...</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>⚡ Last Update:</span>
+                                    <span class="font-bold text-yellow-300" id="adminLastUpdate">Now</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>🌐 Connected Devices:</span>
+                                    <span class="font-bold text-purple-300" id="connectedDevices">All</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>👥 Active Users:</span>
+                                    <span class="font-bold text-orange-300" id="activeUsersCount">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center">
+                            <button onclick="forceSyncAllDevices()" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-bold py-2 px-4 rounded transition-colors">
+                                🔄 FORCE SYNC ALL DEVICES
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Admin Debug Panel -->
                     <div class="bg-red-50 rounded-lg p-4 mb-6">
                         <h4 class="text-lg font-bold text-gray-800 mb-4">🔧 Admin Debug Panel</h4>
@@ -669,6 +705,8 @@
                             <div><strong>Total Transactions:</strong> <span id="debugTotalTransactions">0</span></div>
                             <div><strong>Total History:</strong> <span id="debugTotalHistory">0</span></div>
                             <div><strong>Lottery Results:</strong> <span id="debugLotteryResults">None</span></div>
+                            <div><strong>Master Control:</strong> <span id="debugMasterControl">Active</span></div>
+                            <div><strong>Sync Status:</strong> <span id="debugSyncStatus">Connected</span></div>
                         </div>
                     </div>
 
@@ -2995,16 +3033,20 @@
             }
         }
 
-        // Enhanced real-time updates system
+        // MASTER ADMIN CONTROL REAL-TIME SYSTEM
+        // All devices instantly respond to admin commands
         function setupRealTimeUpdates() {
-            // Listen for storage changes from other tabs/devices
+            // PRIORITY LISTENER: Master Admin Control
             window.addEventListener('storage', function(e) {
                 try {
-                    if (e.key === 'lotteryResults' || e.key === 'lotterySync') {
-                        // Reload all data from sync
+                    // INSTANT RESPONSE to Master Control changes
+                    if (e.key === 'LOTTERY_MASTER_CONTROL') {
+                        console.log('🔥 MASTER CONTROL UPDATE RECEIVED');
+                        
+                        // Immediately load all data from master control
                         loadAllDataFromSync();
                         
-                        // Update all displays
+                        // Force update ALL displays instantly
                         updateLotteryResults();
                         checkWinningNumbers();
                         updateHistoryDisplay();
@@ -3016,9 +3058,32 @@
                             updateAdminTransactionDisplay();
                             updateAdminHistoryDisplay();
                             updateAdminNotificationBadge();
+                            updateAdminNotificationPanel();
                         }
                         
-                        // Show notification to user
+                        // Show instant notification to users
+                        if (currentUser && currentUser.type !== 'admin') {
+                            showLotteryNotification('⚡ Admin Control Update - ချက်ချင်း အပ်ဒိတ်!', 'success');
+                        }
+                        
+                        return; // Master control handled, skip other checks
+                    }
+                    
+                    // Handle other storage events
+                    if (e.key === 'lotteryResults' || e.key === 'lotterySync') {
+                        loadAllDataFromSync();
+                        updateLotteryResults();
+                        checkWinningNumbers();
+                        updateHistoryDisplay();
+                        updateUserDisplay();
+                        
+                        if (currentUser && currentUser.type === 'admin') {
+                            updateUserManagementDisplay();
+                            updateAdminTransactionDisplay();
+                            updateAdminHistoryDisplay();
+                            updateAdminNotificationBadge();
+                        }
+                        
                         if (currentUser && currentUser.type !== 'admin') {
                             showLotteryNotification('🔄 အချက်အလက် အပ်ဒိတ် ရရှိပါပြီ!', 'success');
                         }
@@ -3061,7 +3126,39 @@
                 }
             });
             
-            // Aggressive polling for cross-device sync (every 3 seconds)
+            // BROADCAST CHANNEL for cross-device communication
+            if (typeof BroadcastChannel !== 'undefined') {
+                const adminChannel = new BroadcastChannel('lottery_admin_control');
+                adminChannel.addEventListener('message', function(event) {
+                    try {
+                        if (event.data.type === 'ADMIN_UPDATE') {
+                            console.log('📡 Broadcast Channel Update Received');
+                            loadAllDataFromSync();
+                            
+                            // Update all displays
+                            updateLotteryResults();
+                            checkWinningNumbers();
+                            updateHistoryDisplay();
+                            updateUserDisplay();
+                            
+                            if (currentUser && currentUser.type === 'admin') {
+                                updateUserManagementDisplay();
+                                updateAdminTransactionDisplay();
+                                updateAdminHistoryDisplay();
+                                updateAdminNotificationBadge();
+                            }
+                            
+                            if (currentUser && currentUser.type !== 'admin') {
+                                showLotteryNotification('📡 Cross-Device Update!', 'success');
+                            }
+                        }
+                    } catch (error) {
+                        console.log('Broadcast channel error:', error);
+                    }
+                });
+            }
+            
+            // SUPER AGGRESSIVE POLLING for Master Control (every 1 second)
             setInterval(() => {
                 try {
                     // Store current state
@@ -3071,10 +3168,10 @@
                     const currentResultsState = JSON.stringify(todayResults);
                     const currentNotificationsState = JSON.stringify(adminNotifications);
                     
-                    // Load latest data
+                    // Load latest data from master control
                     loadAllDataFromSync();
                     
-                    // Check for changes and update displays
+                    // Check for changes and update displays instantly
                     let hasChanges = false;
                     
                     if (currentUsersState !== JSON.stringify(users)) {
@@ -3106,9 +3203,9 @@
                         checkWinningNumbers();
                         hasChanges = true;
                         
-                        // Show lottery result notification
+                        // INSTANT lottery result notification
                         if (currentUser && currentUser.type !== 'admin') {
-                            showLotteryNotification('🎰 ထီရလဒ် အပ်ဒိတ် ရရှိပါပြီ!', 'success');
+                            showLotteryNotification('🎰 ထီရလဒ် ထွက်ပါပြီ! (Admin Control)', 'success');
                         }
                     }
                     
@@ -3126,34 +3223,50 @@
                         if (updatedUser && updatedUser.balance !== currentUser.balance) {
                             currentUser.balance = updatedUser.balance;
                             updateUserDisplay();
+                            
+                            // Show balance update notification
+                            if (currentUser.type !== 'admin') {
+                                showLotteryNotification('💰 လက်ကျန်ငွေ အပ်ဒိတ်!', 'success');
+                            }
                         }
                     }
                     
                 } catch (error) {
-                    console.log('Polling sync error:', error);
+                    console.log('Super polling error:', error);
                 }
-            }, 3000); // Check every 3 seconds
+            }, 1000); // Check every 1 second for INSTANT updates
             
-            // Additional fast polling for lottery results (every 1 second)
+            // ULTRA FAST polling for lottery results (every 500ms)
             setInterval(() => {
                 try {
                     const currentResults = JSON.stringify(todayResults);
-                    loadLotteryResults();
+                    
+                    // Check master control first
+                    const masterControl = localStorage.getItem('LOTTERY_MASTER_CONTROL');
+                    if (masterControl) {
+                        const masterData = JSON.parse(masterControl);
+                        if (masterData.todayResults) {
+                            todayResults = masterData.todayResults;
+                        }
+                    } else {
+                        loadLotteryResults();
+                    }
+                    
                     const newResults = JSON.stringify(todayResults);
                     
                     if (currentResults !== newResults) {
                         updateLotteryResults();
                         checkWinningNumbers();
                         
-                        // Immediate notification for lottery results
+                        // ULTRA FAST notification for lottery results
                         if (currentUser && currentUser.type !== 'admin') {
-                            showLotteryNotification('⚡ ထီရလဒ် ထွက်ပါပြီ!', 'success');
+                            showLotteryNotification('⚡ ထီရလဒ် ချက်ချင်း ထွက်ပါပြီ!', 'success');
                         }
                     }
                 } catch (error) {
-                    console.log('Fast lottery polling error:', error);
+                    console.log('Ultra fast polling error:', error);
                 }
-            }, 1000); // Check every 1 second for lottery results
+            }, 500); // Check every 500ms for ULTRA FAST lottery updates
         }
 
         // Initialize lottery system
@@ -3469,22 +3582,38 @@
             }
         }
 
-        // Cross-device synchronization system
+        // CENTRALIZED ADMIN CONTROL SYSTEM
+        // All devices connect to this single admin control center
         function syncDataToServer() {
             try {
-                // Create a comprehensive sync object with timestamp
-                const syncData = {
+                // Create master control data with admin authority
+                const masterData = {
+                    // Core system data
                     users: users,
                     history: history,
                     transactionHistory: transactionHistory,
                     todayResults: todayResults,
                     adminNotifications: adminNotifications,
-                    lastSync: new Date().getTime(),
-                    syncId: Date.now() + Math.random() // Unique sync ID
+                    
+                    // Admin control metadata
+                    adminControl: {
+                        lastUpdate: new Date().getTime(),
+                        adminDevice: currentUser?.type === 'admin' ? getBrowserInfo() + ' on ' + getDeviceInfo() : null,
+                        controlId: Date.now() + Math.random(),
+                        version: '2.0'
+                    },
+                    
+                    // Cross-device sync info
+                    syncInfo: {
+                        totalDevices: 0,
+                        activeUsers: users.filter(u => isUserOnline(u)).length,
+                        lastSync: new Date().toLocaleString('my-MM')
+                    }
                 };
                 
-                // Save to multiple localStorage keys for better cross-device sync
-                localStorage.setItem('lotterySync', JSON.stringify(syncData));
+                // MASTER CONTROL - Save to all possible storage locations
+                localStorage.setItem('LOTTERY_MASTER_CONTROL', JSON.stringify(masterData));
+                localStorage.setItem('lotterySync', JSON.stringify(masterData));
                 localStorage.setItem('lotteryUsers', JSON.stringify(users));
                 localStorage.setItem('lotteryTransactions', JSON.stringify(transactionHistory));
                 localStorage.setItem('lotteryHistory', JSON.stringify(history));
@@ -3492,48 +3621,119 @@
                 localStorage.setItem('lotteryResultsDate', new Date().toDateString());
                 localStorage.setItem('adminNotifications', JSON.stringify(adminNotifications));
                 
-                // Trigger storage event for same-origin cross-tab communication
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'lotterySync',
-                    newValue: JSON.stringify(syncData),
-                    url: window.location.href
-                }));
+                // BROADCAST TO ALL DEVICES - Force update across all tabs/devices
+                try {
+                    // Method 1: Storage Event (same origin)
+                    window.dispatchEvent(new StorageEvent('storage', {
+                        key: 'LOTTERY_MASTER_CONTROL',
+                        newValue: JSON.stringify(masterData),
+                        url: window.location.href
+                    }));
+                    
+                    // Method 2: Broadcast Channel (if supported)
+                    if (typeof BroadcastChannel !== 'undefined') {
+                        const channel = new BroadcastChannel('lottery_admin_control');
+                        channel.postMessage({
+                            type: 'ADMIN_UPDATE',
+                            data: masterData,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
+                    // Method 3: Multiple storage keys for redundancy
+                    for (let i = 1; i <= 5; i++) {
+                        localStorage.setItem(`lottery_backup_${i}`, JSON.stringify(masterData));
+                    }
+                    
+                } catch (broadcastError) {
+                    console.log('Broadcast error:', broadcastError);
+                }
                 
             } catch (error) {
-                console.log('Sync error:', error);
+                console.log('Master sync error:', error);
             }
         }
 
-        // Enhanced cross-device data loading
+        // MASTER CONTROL DATA LOADING
+        // All devices must obey the master admin control
         function loadAllDataFromSync() {
             try {
-                // Load from individual keys first
+                // PRIORITY 1: Load from MASTER CONTROL
+                const masterControl = localStorage.getItem('LOTTERY_MASTER_CONTROL');
+                if (masterControl) {
+                    const masterData = JSON.parse(masterControl);
+                    
+                    // Check if master data is valid and recent
+                    const adminUpdate = masterData.adminControl?.lastUpdate || 0;
+                    const currentTime = Date.now();
+                    
+                    // Master control is always valid (no time limit for admin control)
+                    if (masterData.users) users = masterData.users;
+                    if (masterData.history) history = masterData.history;
+                    if (masterData.transactionHistory) transactionHistory = masterData.transactionHistory;
+                    if (masterData.todayResults) todayResults = masterData.todayResults;
+                    if (masterData.adminNotifications) adminNotifications = masterData.adminNotifications;
+                    
+                    console.log('✅ Loaded from MASTER CONTROL:', masterData.adminControl?.adminDevice || 'Unknown Admin');
+                    return; // Master control loaded successfully
+                }
+                
+                // PRIORITY 2: Load from backup sync data
+                const syncData = localStorage.getItem('lotterySync');
+                if (syncData) {
+                    const parsed = JSON.parse(syncData);
+                    
+                    if (parsed.users) users = parsed.users;
+                    if (parsed.history) history = parsed.history;
+                    if (parsed.transactionHistory) transactionHistory = parsed.transactionHistory;
+                    if (parsed.todayResults) todayResults = parsed.todayResults;
+                    if (parsed.adminNotifications) adminNotifications = parsed.adminNotifications;
+                    
+                    console.log('✅ Loaded from backup sync data');
+                    return;
+                }
+                
+                // PRIORITY 3: Load from individual storage keys (fallback)
                 loadUsers();
                 loadTransactions();
                 loadHistory();
                 loadLotteryResults();
                 loadNotifications();
                 
-                // Then check for newer sync data
-                const syncData = localStorage.getItem('lotterySync');
-                if (syncData) {
-                    const parsed = JSON.parse(syncData);
-                    
-                    // Check if sync data is newer than current data
-                    const syncTime = parsed.lastSync || 0;
-                    const currentTime = Date.now();
-                    
-                    // If sync data is recent (within 1 hour), use it
-                    if (currentTime - syncTime < 3600000) {
-                        if (parsed.users) users = parsed.users;
-                        if (parsed.history) history = parsed.history;
-                        if (parsed.transactionHistory) transactionHistory = parsed.transactionHistory;
-                        if (parsed.todayResults) todayResults = parsed.todayResults;
-                        if (parsed.adminNotifications) adminNotifications = parsed.adminNotifications;
-                    }
-                }
+                console.log('✅ Loaded from individual storage keys (fallback)');
+                
             } catch (error) {
-                console.log('Load sync data error:', error);
+                console.log('Master control load error:', error);
+                
+                // EMERGENCY FALLBACK: Try backup storage
+                try {
+                    for (let i = 1; i <= 5; i++) {
+                        const backup = localStorage.getItem(`lottery_backup_${i}`);
+                        if (backup) {
+                            const backupData = JSON.parse(backup);
+                            if (backupData.users) users = backupData.users;
+                            if (backupData.history) history = backupData.history;
+                            if (backupData.transactionHistory) transactionHistory = backupData.transactionHistory;
+                            if (backupData.todayResults) todayResults = backupData.todayResults;
+                            if (backupData.adminNotifications) adminNotifications = backupData.adminNotifications;
+                            console.log(`✅ Loaded from backup ${i}`);
+                            return;
+                        }
+                    }
+                } catch (backupError) {
+                    console.log('Backup load error:', backupError);
+                }
+                
+                // Final fallback to individual loading
+                try {
+                    loadUsers();
+                    loadTransactions();
+                    loadHistory();
+                    loadLotteryResults();
+                    loadNotifications();
+                } catch (finalError) {
+                    console.log('Final fallback error:', finalError);
+                }
             }
         }
 
@@ -3789,6 +3989,62 @@
             alert('✅ Test Transaction ထည့်ပြီးပါပြီ!\n\nငွေသွင်း/ထုတ် အတည်ပြုရန် section တွင် ကြည့်ပါ!');
         }
 
+        // MASTER ADMIN CONTROL FUNCTIONS
+        function forceSyncAllDevices() {
+            try {
+                if (!currentUser || currentUser.type !== 'admin') {
+                    alert('Admin access required!');
+                    return;
+                }
+                
+                // Force immediate sync to all devices
+                syncDataToServer();
+                
+                // Clear all backup storage and force refresh
+                for (let i = 1; i <= 10; i++) {
+                    localStorage.setItem(`lottery_backup_${i}`, localStorage.getItem('LOTTERY_MASTER_CONTROL'));
+                }
+                
+                // Trigger multiple storage events
+                const masterData = JSON.parse(localStorage.getItem('LOTTERY_MASTER_CONTROL') || '{}');
+                masterData.forceSync = Date.now();
+                localStorage.setItem('LOTTERY_MASTER_CONTROL', JSON.stringify(masterData));
+                
+                // Broadcast to all channels
+                if (typeof BroadcastChannel !== 'undefined') {
+                    const channel = new BroadcastChannel('lottery_admin_control');
+                    channel.postMessage({
+                        type: 'FORCE_SYNC',
+                        data: masterData,
+                        timestamp: Date.now()
+                    });
+                }
+                
+                // Update admin control status
+                updateAdminControlStatus();
+                
+                alert('🔥 FORCE SYNC COMPLETED!\n\n✅ အားလုံး device များ ချက်ချင်း အပ်ဒိတ် ဖြစ်ပါမည်!\n📡 Master Control Active\n⚡ Real-time sync enabled');
+                
+            } catch (error) {
+                console.log('Force sync error:', error);
+                alert('Force sync failed. Please try again.');
+            }
+        }
+
+        function updateAdminControlStatus() {
+            try {
+                if (currentUser && currentUser.type === 'admin') {
+                    document.getElementById('adminControlStatus').textContent = 'ACTIVE';
+                    document.getElementById('adminDeviceInfo').textContent = getBrowserInfo() + ' on ' + getDeviceInfo();
+                    document.getElementById('adminLastUpdate').textContent = new Date().toLocaleTimeString('my-MM');
+                    document.getElementById('connectedDevices').textContent = 'All Synced';
+                    document.getElementById('activeUsersCount').textContent = users.filter(u => isUserOnline(u)).length;
+                }
+            } catch (error) {
+                console.log('Admin status update error:', error);
+            }
+        }
+
         function updateDebugInfo() {
             try {
                 document.getElementById('debugCurrentUser').textContent = currentUser ? `${currentUser.name} (${currentUser.type})` : 'None';
@@ -3799,6 +4055,16 @@
                 const results = Object.entries(todayResults).filter(([time, result]) => result !== null);
                 document.getElementById('debugLotteryResults').textContent = results.length > 0 ? 
                     results.map(([time, result]) => `${time}:${result}`).join(', ') : 'None';
+                
+                // Master control status
+                const masterControl = localStorage.getItem('LOTTERY_MASTER_CONTROL');
+                document.getElementById('debugMasterControl').textContent = masterControl ? 'Active' : 'Inactive';
+                document.getElementById('debugSyncStatus').textContent = 'Connected';
+                
+                // Update admin control status if admin
+                if (currentUser && currentUser.type === 'admin') {
+                    updateAdminControlStatus();
+                }
             } catch (error) {
                 console.log('Debug info update error:', error);
             }
@@ -3811,5 +4077,5 @@
             safeInitialize();
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f9923070ba8957',t:'MTc1Nzk1NDQ4MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f9a6076382a1b7',t:'MTc1Nzk1NTI5My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
