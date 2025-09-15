@@ -687,9 +687,33 @@
             <button id="historyBtn" class="bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg transition-colors block">
                 📊
             </button>
-            <button id="adminBtn" class="bg-green-500 hover:bg-green-600 text-white p-4 rounded-full shadow-lg transition-colors block">
+            <button id="adminBtn" class="bg-green-500 hover:bg-green-600 text-white p-4 rounded-full shadow-lg transition-colors block relative">
                 👑
+                <div id="adminNotificationBadge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold hidden animate-pulse">
+                    0
+                </div>
             </button>
+        </div>
+
+        <!-- Admin Notification Panel -->
+        <div id="adminNotificationPanel" class="fixed top-4 right-4 bg-white rounded-lg shadow-2xl border-2 border-red-500 max-w-sm w-full z-50 hidden">
+            <div class="bg-gradient-to-r from-red-500 to-pink-500 p-3 text-white rounded-t-lg">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">🔔</span>
+                        <span class="font-bold">Admin Notifications</span>
+                    </div>
+                    <button id="closeNotificationPanel" class="text-white hover:text-gray-200 text-xl">✕</button>
+                </div>
+            </div>
+            <div id="notificationContent" class="p-4 max-h-96 overflow-y-auto">
+                <!-- Notifications will be added here -->
+            </div>
+            <div class="p-3 border-t bg-gray-50 rounded-b-lg">
+                <button id="clearAllNotifications" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors">
+                    🗑️ Clear All
+                </button>
+            </div>
         </div>
     </div>
 
@@ -707,6 +731,7 @@
         let totalAmount = 0;
         let history = [];
         let transactionHistory = []; // For deposits and withdrawals
+        let adminNotifications = []; // For admin notifications
 
         // Authentication Functions
         function validatePhone(phone) {
@@ -2185,6 +2210,8 @@
                 // Update user management display when admin panel opens
                 updateUserManagementDisplay();
                 updateAdminTransactionDisplay();
+                updateAdminNotificationBadge();
+                updateAdminNotificationPanel();
             } else {
                 alert('Wrong password!');
             }
@@ -2198,6 +2225,45 @@
         document.getElementById('adminPassword').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 document.getElementById('loginAdmin').click();
+            }
+        });
+
+        // Admin notification event listeners
+        document.getElementById('adminBtn').addEventListener('click', function() {
+            // Check if notification panel is open
+            const notificationPanel = document.getElementById('adminNotificationPanel');
+            if (!notificationPanel.classList.contains('hidden')) {
+                // Close notification panel
+                notificationPanel.classList.add('hidden');
+                return;
+            }
+            
+            // If admin is logged in, show notification panel first
+            if (currentUser && currentUser.type === 'admin') {
+                notificationPanel.classList.remove('hidden');
+                updateAdminNotificationPanel();
+            } else {
+                // Show admin login modal
+                document.getElementById('adminModal').classList.remove('hidden');
+                document.getElementById('adminModal').classList.add('flex');
+            }
+        });
+
+        document.getElementById('closeNotificationPanel').addEventListener('click', function() {
+            document.getElementById('adminNotificationPanel').classList.add('hidden');
+        });
+
+        document.getElementById('clearAllNotifications').addEventListener('click', function() {
+            clearAllNotifications();
+        });
+
+        // Click outside to close notification panel
+        document.addEventListener('click', function(e) {
+            const panel = document.getElementById('adminNotificationPanel');
+            const adminBtn = document.getElementById('adminBtn');
+            
+            if (!panel.contains(e.target) && !adminBtn.contains(e.target) && !panel.classList.contains('hidden')) {
+                panel.classList.add('hidden');
             }
         });
 
@@ -2597,6 +2663,204 @@
             document.getElementById('withdrawAmount').dispatchEvent(new Event('input'));
         }
 
+        // Admin notification system
+        function notifyAdmin(type, data) {
+            const notification = {
+                id: Date.now(),
+                type: type,
+                data: data,
+                timestamp: new Date().toLocaleString('my-MM'),
+                read: false
+            };
+            
+            adminNotifications.unshift(notification);
+            saveNotifications();
+            updateAdminNotificationBadge();
+            updateAdminNotificationPanel();
+            
+            // Auto-refresh admin panels if open
+            updateUserManagementDisplay();
+            updateAdminHistoryDisplay();
+            updateAdminTransactionDisplay();
+            
+            // Show notification sound/visual effect
+            showAdminNotificationAlert(type, data);
+        }
+
+        function showAdminNotificationAlert(type, data) {
+            // Only show if user is admin
+            if (!currentUser || currentUser.type !== 'admin') return;
+            
+            let message = '';
+            let icon = '';
+            
+            switch(type) {
+                case 'newUser':
+                    message = `👤 အကောင့်အသစ်: ${data.name} (${data.phone})`;
+                    icon = '👤';
+                    break;
+                case 'newTransaction':
+                    const typeText = data.type === 'deposit' ? 'ငွေသွင်း' : 'ငွေထုတ်';
+                    const methodIcon = data.method === 'wavepay' ? '🌊' : '💜';
+                    message = `${methodIcon} ${typeText}: ${data.amount.toLocaleString()} ကျပ် - ${data.user?.name}`;
+                    icon = data.type === 'deposit' ? '💰' : '🏧';
+                    break;
+                case 'newBet':
+                    const betNumbers = data.bets.map(bet => bet.number).join(', ');
+                    message = `🎰 ထီအသစ်: ${betNumbers} (${data.amount.toLocaleString()} ကျပ်) - ${data.user?.name}`;
+                    icon = '🎰';
+                    break;
+            }
+            
+            // Show floating notification
+            showFloatingNotification(message, icon);
+        }
+
+        function showFloatingNotification(message, icon) {
+            // Remove existing notification if any
+            const existingNotification = document.getElementById('floatingNotification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+            
+            // Create floating notification
+            const notification = document.createElement('div');
+            notification.id = 'floatingNotification';
+            notification.className = 'fixed top-20 right-4 bg-red-500 text-white px-4 py-3 rounded-lg shadow-2xl z-50 animate-bounce border-2 border-white';
+            notification.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">${icon}</span>
+                    <span class="font-medium text-sm">${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (notification) {
+                    notification.style.opacity = '0';
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, 5000);
+            
+            // Make notification clickable to open admin panel
+            notification.addEventListener('click', function() {
+                document.getElementById('adminNotificationPanel').classList.remove('hidden');
+                notification.remove();
+            });
+        }
+
+        function updateAdminNotificationBadge() {
+            const badge = document.getElementById('adminNotificationBadge');
+            const unreadCount = adminNotifications.filter(n => !n.read).length;
+            
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        function updateAdminNotificationPanel() {
+            const container = document.getElementById('notificationContent');
+            
+            if (adminNotifications.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">No notifications</p>';
+                return;
+            }
+            
+            container.innerHTML = adminNotifications.map(notification => {
+                let content = '';
+                let bgColor = notification.read ? 'bg-gray-50' : 'bg-blue-50';
+                let borderColor = notification.read ? 'border-gray-200' : 'border-blue-300';
+                
+                switch(notification.type) {
+                    case 'newUser':
+                        content = `
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-lg">👤</span>
+                                <span class="font-medium text-green-700">အကောင့်အသစ်</span>
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                <div><strong>${notification.data.name}</strong></div>
+                                <div class="text-xs text-gray-500">${notification.data.phone}</div>
+                            </div>
+                        `;
+                        break;
+                    case 'newTransaction':
+                        const typeText = notification.data.type === 'deposit' ? 'ငွေသွင်းမှု' : 'ငွေထုတ်မှု';
+                        const methodIcon = notification.data.method === 'wavepay' ? '🌊' : '💜';
+                        const methodName = notification.data.method === 'wavepay' ? 'Wave Pay' : 'K Pay';
+                        content = `
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-lg">${notification.data.type === 'deposit' ? '💰' : '🏧'}</span>
+                                <span class="font-medium ${notification.data.type === 'deposit' ? 'text-green-700' : 'text-blue-700'}">${typeText}</span>
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                <div><strong>${notification.data.user?.name}</strong> (${notification.data.user?.phone})</div>
+                                <div class="text-xs text-gray-600">${methodIcon} ${methodName} - ${notification.data.amount.toLocaleString()} ကျပ်</div>
+                            </div>
+                        `;
+                        break;
+                    case 'newBet':
+                        const betNumbers = notification.data.bets.map(bet => `${bet.number} (${bet.amount}ကျပ်)`).join(', ');
+                        content = `
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-lg">🎰</span>
+                                <span class="font-medium text-purple-700">ထီအသစ်</span>
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                <div><strong>${notification.data.user?.name}</strong> (${notification.data.user?.phone})</div>
+                                <div class="text-xs text-gray-600">${betNumbers}</div>
+                                <div class="text-xs font-medium text-green-600">စုစုပေါင်း: ${notification.data.amount.toLocaleString()} ကျပ်</div>
+                            </div>
+                        `;
+                        break;
+                }
+                
+                return `
+                    <div class="border ${borderColor} ${bgColor} rounded-lg p-3 mb-3 cursor-pointer hover:bg-blue-100 transition-colors" onclick="markNotificationAsRead(${notification.id})">
+                        ${content}
+                        <div class="text-xs text-gray-400 mt-2">${notification.timestamp}</div>
+                        ${!notification.read ? '<div class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></div>' : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function markNotificationAsRead(id) {
+            const notification = adminNotifications.find(n => n.id === id);
+            if (notification) {
+                notification.read = true;
+                saveNotifications();
+                updateAdminNotificationBadge();
+                updateAdminNotificationPanel();
+            }
+        }
+
+        function clearAllNotifications() {
+            if (confirm('အားလုံး ရှင်းလင်းမှာ သေချာပါသလား?')) {
+                adminNotifications = [];
+                saveNotifications();
+                updateAdminNotificationBadge();
+                updateAdminNotificationPanel();
+            }
+        }
+
+        function saveNotifications() {
+            localStorage.setItem('adminNotifications', JSON.stringify(adminNotifications));
+        }
+
+        function loadNotifications() {
+            const saved = localStorage.getItem('adminNotifications');
+            if (saved) {
+                adminNotifications = JSON.parse(saved);
+            }
+        }
+
         // Data persistence functions
         function saveUsers() {
             localStorage.setItem('lotteryUsers', JSON.stringify(users));
@@ -2636,6 +2900,7 @@
             loadTransactions();
             loadHistory();
             loadLotteryResults();
+            loadNotifications();
         }
 
         // Initialize app
@@ -2653,6 +2918,8 @@
                 updateHistoryDisplay();
                 updateAdminHistoryDisplay();
                 updateAdminTransactionDisplay();
+                updateAdminNotificationBadge();
+                updateAdminNotificationPanel();
                 initializeLotterySystem();
             } else {
                 // No valid session, show login screen
@@ -2663,6 +2930,8 @@
                 updateHistoryDisplay();
                 updateAdminHistoryDisplay();
                 updateAdminTransactionDisplay();
+                updateAdminNotificationBadge();
+                updateAdminNotificationPanel();
                 initializeLotterySystem();
             }
         }
@@ -2670,5 +2939,5 @@
         // Initialize
         initializeApp();
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8d738f7c5895b',t:'MTc1Nzk0NjgyMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97f8ec5ec08da1b0',t:'MTc1Nzk0NzY4OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
