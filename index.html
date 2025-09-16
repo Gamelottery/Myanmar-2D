@@ -4121,5 +4121,34 @@
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
-</script></body>
+</script><script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+  const supabaseUrl = "https://kclbdxvoownosavvwaap.supabase.co"; 
+  const supabaseKey = "sb_publishable_D-WekdKLrnRcCzOq3-p0cg_z9DQoHEO"; 
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  async function getLatestNumber() {
+    const { data, error } = await supabase
+      .from("MM2D")
+      .select("number")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error(error);
+      document.getElementById("lottery").innerText = "Error loading";
+    } else {
+      document.getElementById("lottery").innerText = data[0]?.number || "No data yet";
+    }
+  }
+
+  // 5 စက္ကန့်တိုင်း refresh
+  setInterval(getLatestNumber, 5000);
+  getLatestNumber();
+</script>
+
+<div>
+  ထီနံပါတ်: <span id="lottery"></span>
+</div></body>
 </html>
