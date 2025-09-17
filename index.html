@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Myanmar 2D Lottery - မြန်မာ ၂လုံး ထီ</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         .lottery-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -65,6 +66,17 @@
                     <div class="text-xs text-yellow-700 space-y-1">
                         <p><strong>User:</strong> 09123456789 / password: 123456</p>
                         <p><strong>Admin:</strong> 09750397287 / password: admin123</p>
+                    </div>
+                </div>
+                
+                <div class="mt-4 bg-blue-50 rounded-lg p-4">
+                    <h3 class="text-sm font-bold text-blue-800 mb-2">🗄️ Supabase Database Setup</h3>
+                    <div class="text-xs text-blue-700 space-y-1">
+                        <p><strong>1.</strong> သင့် Supabase URL ကို line 309 တွင် ထည့်ပါ</p>
+                        <p><strong>2.</strong> Database တွင် tables ၂ ခု လိုအပ်ပါသည်:</p>
+                        <p class="ml-4">• <strong>users</strong> table</p>
+                        <p class="ml-4">• <strong>lottery_results</strong> table</p>
+                        <p><strong>3.</strong> Real-time updates အတွက် Row Level Security ဖွင့်ပါ</p>
                     </div>
                 </div>
             </div>
@@ -303,6 +315,13 @@
     </div>
 
     <script>
+        // Supabase Configuration
+        const SUPABASE_URL =  https://kclbdxvoownosavvwaap.supabase.com
+        const SUPABASE_ANON_KEY = 'sb_publishable_D-WekdKLrnRcCzOq3-p0cg_z9DQoHEO';
+        
+        // Initialize Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
         // Global variables
         let currentUser = null;
         let users = [
@@ -313,9 +332,216 @@
         let totalAmount = 0;
         let todayResults = { '09:30': null, '14:00': null, '16:30': null };
 
+        // Supabase Database Functions
+        async function initializeDatabase() {
+            try {
+                // Create users table if not exists
+                const { error: usersError } = await supabase
+                    .from('users')
+                    .select('*')
+                    .limit(1);
+                
+                if (usersError && usersError.code === 'PGRST116') {
+                    console.log('Creating users table...');
+                    // Table doesn't exist, create sample data
+                    await createSampleData();
+                }
+                
+                // Create lottery_results table if not exists
+                const { error: resultsError } = await supabase
+                    .from('lottery_results')
+                    .select('*')
+                    .limit(1);
+                
+                if (resultsError && resultsError.code === 'PGRST116') {
+                    console.log('Creating lottery_results table...');
+                }
+                
+                console.log('✅ Database initialized successfully');
+            } catch (error) {
+                console.log('Database initialization error:', error);
+                // Fallback to localStorage
+                loadFromStorage();
+            }
+        }
+        
+        async function createSampleData() {
+            try {
+                // Insert sample users
+                const { error } = await supabase
+                    .from('users')
+                    .insert([
+                        { phone: '09123456789', password: '123456', name: 'User 1', balance: 50000, type: 'user' },
+                        { phone: '09750397287', password: 'admin123', name: 'Admin', balance: 999999, type: 'admin' }
+                    ]);
+                
+                if (error) {
+                    console.log('Sample data creation error:', error);
+                }
+            } catch (error) {
+                console.log('Sample data error:', error);
+            }
+        }
+        
+        async function loadUsersFromDB() {
+            try {
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*');
+                
+                if (error) {
+                    console.log('Load users error:', error);
+                    return false;
+                }
+                
+                if (data && data.length > 0) {
+                    users = data;
+                    console.log('✅ Users loaded from database:', users.length);
+                    return true;
+                }
+            } catch (error) {
+                console.log('Database load error:', error);
+            }
+            return false;
+        }
+        
+        async function saveUserToDB(user) {
+            try {
+                const { error } = await supabase
+                    .from('users')
+                    .upsert([user], { onConflict: 'phone' });
+                
+                if (error) {
+                    console.log('Save user error:', error);
+                    return false;
+                }
+                
+                console.log('✅ User saved to database');
+                return true;
+            } catch (error) {
+                console.log('Database save error:', error);
+                return false;
+            }
+        }
+        
+        async function loadLotteryResultsFromDB() {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                
+                const { data, error } = await supabase
+                    .from('lottery_results')
+                    .select('*')
+                    .eq('date', today);
+                
+                if (error) {
+                    console.log('Load results error:', error);
+                    return false;
+                }
+                
+                if (data && data.length > 0) {
+                    const result = data[0];
+                    todayResults = {
+                        '09:30': result.result_930,
+                        '14:00': result.result_200,
+                        '16:30': result.result_430
+                    };
+                    console.log('✅ Lottery results loaded from database');
+                    return true;
+                }
+            } catch (error) {
+                console.log('Database load results error:', error);
+            }
+            return false;
+        }
+        
+        async function saveLotteryResultsToDB() {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                
+                const resultData = {
+                    date: today,
+                    result_930: todayResults['09:30'],
+                    result_200: todayResults['14:00'],
+                    result_430: todayResults['16:30'],
+                    updated_at: new Date().toISOString()
+                };
+                
+                const { error } = await supabase
+                    .from('lottery_results')
+                    .upsert([resultData], { onConflict: 'date' });
+                
+                if (error) {
+                    console.log('Save results error:', error);
+                    return false;
+                }
+                
+                console.log('✅ Lottery results saved to database');
+                return true;
+            } catch (error) {
+                console.log('Database save results error:', error);
+                return false;
+            }
+        }
+        
+        // Real-time subscription for lottery results
+        function setupRealtimeSubscription() {
+            try {
+                // Subscribe to lottery results changes
+                const resultsSubscription = supabase
+                    .channel('lottery_results_changes')
+                    .on('postgres_changes', 
+                        { event: '*', schema: 'public', table: 'lottery_results' },
+                        (payload) => {
+                            console.log('🔄 Real-time lottery results update:', payload);
+                            if (payload.new) {
+                                todayResults = {
+                                    '09:30': payload.new.result_930,
+                                    '14:00': payload.new.result_200,
+                                    '16:30': payload.new.result_430
+                                };
+                                updateLotteryResults();
+                                showNotification('🎰 ထီရလဒ် အပ်ဒိတ် ရရှိပါပြီ!');
+                            }
+                        }
+                    )
+                    .subscribe();
+                
+                // Subscribe to users changes
+                const usersSubscription = supabase
+                    .channel('users_changes')
+                    .on('postgres_changes',
+                        { event: '*', schema: 'public', table: 'users' },
+                        (payload) => {
+                            console.log('🔄 Real-time users update:', payload);
+                            loadUsersFromDB().then(() => {
+                                if (currentUser) {
+                                    const updatedUser = users.find(u => u.phone === currentUser.phone);
+                                    if (updatedUser) {
+                                        currentUser.balance = updatedUser.balance;
+                                        updateUserDisplay();
+                                    }
+                                }
+                                if (currentUser && currentUser.type === 'admin') {
+                                    updateUserList();
+                                }
+                            });
+                        }
+                    )
+                    .subscribe();
+                
+                console.log('✅ Real-time subscriptions setup complete');
+            } catch (error) {
+                console.log('Real-time subscription error:', error);
+            }
+        }
+
         // Authentication
-        function login(phone, password) {
+        async function login(phone, password) {
             console.log('Login attempt:', phone, password);
+            
+            // Try to load users from database first
+            await loadUsersFromDB();
+            
             console.log('Available users:', users);
             
             const user = users.find(u => u.phone === phone && u.password === password);
@@ -444,7 +670,7 @@
             payBtn.disabled = betList.length === 0;
         }
 
-        function placeBet() {
+        async function placeBet() {
             if (betList.length === 0) {
                 alert('ထီထိုးပါ');
                 return;
@@ -462,15 +688,28 @@
 
             if (confirm(`ထီထိုးမှု အတည်ပြုပါ\n\nစုစုပေါင်း: ${totalAmount.toLocaleString()} ကျပ်`)) {
                 currentUser.balance -= totalAmount;
+                
+                // Update user in users array
+                const userIndex = users.findIndex(u => u.phone === currentUser.phone);
+                if (userIndex !== -1) {
+                    users[userIndex].balance = currentUser.balance;
+                    
+                    // Save to database
+                    const dbSaved = await saveUserToDB(users[userIndex]);
+                    if (!dbSaved) {
+                        // Fallback to localStorage
+                        saveToStorage();
+                    }
+                }
+                
                 updateUserDisplay();
-                saveToStorage();
                 
                 betList = [];
                 updateBetDisplay();
                 updateTotal();
                 updatePayButton();
                 
-                alert('ထီထိုးမှု အောင်မြင်ပါသည်!');
+                alert('ထီထိုးမှု အောင်မြင်ပါသည်!\n\n🌐 Database တွင် သိမ်းဆည်းပြီးပါပြီ!');
             }
         }
 
@@ -505,7 +744,7 @@
         }
 
         // Admin functions
-        function setResult(time, inputId) {
+        async function setResult(time, inputId) {
             const input = document.getElementById(inputId);
             const number = input.value.trim();
             
@@ -519,21 +758,33 @@
             
             input.value = '';
             updateLotteryResults();
-            saveToStorage();
-            broadcastUpdate();
+            
+            // Save to database
+            const dbSaved = await saveLotteryResultsToDB();
+            if (!dbSaved) {
+                // Fallback to localStorage
+                saveToStorage();
+                broadcastUpdate();
+            }
             
             const timeDisplay = time === '09:30' ? 'မနက် 9:30' : 
                                time === '14:00' ? 'နေ့လည် 2:00' : 'ညနေ 4:30';
             
-            alert(`✅ ${timeDisplay} ထီရလဒ်: ${formattedNumber}\n\n🌐 အားလုံး device များတွင် ချက်ချင်း ပေါ်ပါမည်!`);
+            alert(`✅ ${timeDisplay} ထီရလဒ်: ${formattedNumber}\n\n🌐 Database နှင့် အားလုံး device များတွင် ချက်ချင်း ပေါ်ပါမည်!`);
         }
 
-        function clearResults() {
+        async function clearResults() {
             if (confirm('ထီရလဒ် အားလုံး ရှင်းလင်းမှာ သေချာပါသလား?')) {
                 todayResults = { '09:30': null, '14:00': null, '16:30': null };
                 updateLotteryResults();
-                saveToStorage();
-                broadcastUpdate();
+                
+                // Save to database
+                const dbSaved = await saveLotteryResultsToDB();
+                if (!dbSaved) {
+                    // Fallback to localStorage
+                    saveToStorage();
+                    broadcastUpdate();
+                }
                 
                 document.getElementById('admin930').value = '';
                 document.getElementById('admin200').value = '';
@@ -571,10 +822,18 @@
             `).join('');
         }
 
-        function addBalance(phone, amount) {
+        async function addBalance(phone, amount) {
             const user = users.find(u => u.phone === phone);
             if (user) {
                 user.balance += amount;
+                
+                // Save to database
+                const dbSaved = await saveUserToDB(user);
+                if (!dbSaved) {
+                    // Fallback to localStorage
+                    saveToStorage();
+                    broadcastUpdate();
+                }
                 
                 if (currentUser && currentUser.phone === phone) {
                     currentUser.balance = user.balance;
@@ -582,10 +841,8 @@
                 }
                 
                 updateUserList();
-                saveToStorage();
-                broadcastUpdate();
                 
-                alert(`${user.name} ၏ လက်ကျန်ငွေ ${amount.toLocaleString()} ကျပ် ထပ်ထည့်ပေးပြီးပါပြီ!`);
+                alert(`${user.name} ၏ လက်ကျန်ငွေ ${amount.toLocaleString()} ကျပ် ထပ်ထည့်ပေးပြီးပါပြီ!\n\n🌐 Database တွင် သိမ်းဆည်းပြီးပါပြီ!`);
             }
         }
 
@@ -953,15 +1210,32 @@
         });
 
         // Initialize app
-        function initializeApp() {
+        async function initializeApp() {
             try {
                 console.log('Initializing app...');
                 updateCurrentDate();
-                loadFromStorage();
+                
+                // Initialize database first
+                await initializeDatabase();
+                
+                // Load data from database
+                const dbLoaded = await loadUsersFromDB();
+                const resultsLoaded = await loadLotteryResultsFromDB();
+                
+                if (!dbLoaded || !resultsLoaded) {
+                    // Fallback to localStorage if database fails
+                    loadFromStorage();
+                }
+                
                 updateLotteryResults();
                 updateBetDisplay();
                 updateTotal();
                 updatePayButton();
+                
+                // Setup real-time subscriptions
+                setupRealtimeSubscription();
+                
+                // Also setup localStorage sync as backup
                 setupRealTimeSync();
                 
                 // Show login screen if no current user
@@ -972,7 +1246,7 @@
                     updateUserDisplay();
                 }
                 
-                console.log('App initialized successfully');
+                console.log('App initialized successfully with database integration');
                 
                 // Update lottery results every minute
                 setInterval(() => {
@@ -980,7 +1254,9 @@
                 }, 60000);
             } catch (error) {
                 console.error('Initialization error:', error);
-                showLoginScreen(); // Fallback to login screen
+                // Fallback to localStorage only
+                loadFromStorage();
+                showLoginScreen();
             }
         }
 
@@ -990,5 +1266,5 @@
             initializeApp();
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'980657bb3481a1b0',t:'MTc1ODA4ODQwMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9806b404c194a1b0',t:'MTc1ODA5MjE4Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
